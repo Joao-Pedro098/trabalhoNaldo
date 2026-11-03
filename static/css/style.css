@@ -97,18 +97,18 @@ html, body {
    ========================================================== */
 .maps-panel {
     position: absolute;
-    top: 12px;
-    left: 80px; /* ao lado da barra esquerda */
-    width: 396px;
-    max-height: calc(100vh - 24px);
+    top: 0;
+    left: 68px; /* Encaixa perfeitamente ao lado da barra esquerda */
+    width: 412px;
+    height: 100vh; /* Comprida até em baixo exatamente como o Google Maps */
     background: #ffffff;
-    border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 4px rgba(0, 0, 0, 0.08);
+    border-radius: 0;
+    box-shadow: 3px 0 16px rgba(0, 0, 0, 0.14);
     z-index: 1100;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    transition: width 0.3s ease;
+    transition: all 0.2s ease;
 }
 
 @media (max-width: 600px) {
@@ -306,9 +306,9 @@ html, body {
     background: #ffffff;
     border: 1px solid #dadce0;
     border-radius: 8px;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
     z-index: 1500;
-    max-height: 220px;
+    max-height: 360px;
     overflow-y: auto;
 }
 
