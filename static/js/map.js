@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 1. INICIALIZAÇÃO DO MAPA (Leaflet)
     // ==========================================
-    // Centro inicial: São Paulo / Brasil
+    // Ponto inicial: Brasil / São Paulo
     const map = L.map('map', {
         zoomControl: false
     }).setView([-23.5505, -46.6333], 13);
@@ -114,7 +114,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         originMarker.bindPopup(`<b>Ponto de Partida (A)</b><br>${name}`).openPopup();
 
-        // Arrastar marcador atualiza coordenada
         originMarker.on('dragend', async (e) => {
             const newPos = e.target.getLatLng();
             const address = await reverseGeocode(newPos.lat, newPos.lng);
@@ -139,7 +138,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         destMarker.bindPopup(`<b>Destino (B)</b><br>${name}`).openPopup();
 
-        // Arrastar marcador atualiza coordenada
         destMarker.on('dragend', async (e) => {
             const newPos = e.target.getLatLng();
             const address = await reverseGeocode(newPos.lat, newPos.lng);
@@ -159,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
             const data = await response.json();
-            return data.results || [];
+            return data.results || (data.dados && data.dados.results) || [];
         } catch (error) {
             console.error("Erro na busca:", error);
             return [];
@@ -217,7 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
     handleInputAutocomplete(originInput, originSuggestions, setOriginPoint);
     handleInputAutocomplete(destInput, destSuggestions, setDestPoint);
 
-    // Fechar sugestões ao clicar fora
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.input-wrapper')) {
             originSuggestions.classList.add('hidden');
@@ -257,31 +254,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
 
-            if (!data.success) {
-                showAlert(data.error || "Não foi possível traçar a rota.");
+            const isSuccess = data.sucesso !== undefined ? data.sucesso : data.success;
+            if (!isSuccess) {
+                showAlert(data.erro || data.error || "Não foi possível traçar a rota.");
                 return;
             }
 
-            // Desenha a linha da rota no mapa
+            // Linha da rota no mapa
             if (routeLayer) map.removeLayer(routeLayer);
 
-            routeLayer = L.polyline(data.coordinates, {
+            const coords = data.coordenadas || data.coordinates || [];
+            routeLayer = L.polyline(coords, {
                 color: '#1a73e8',
                 weight: 6,
                 opacity: 0.85,
                 lineJoin: 'round'
             }).addTo(map);
 
-            // Ajusta o zoom do mapa para enquadrar toda a rota
             map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
 
-            // Atualiza resumo
-            summaryTime.textContent = data.duration_formatted;
-            summaryDistance.textContent = data.distance_formatted;
+            // Resumo
+            summaryTime.textContent = data.duracao_formatada || data.duration_formatted || `${data.duracao_minutos} min`;
+            summaryDistance.textContent = data.distancia_formatada || data.distance_formatted || `${data.distancia_km} km`;
             routeSummary.classList.remove('hidden');
 
-            // Renderiza passos
-            renderSteps(data.steps);
+            // Passos
+            renderSteps(data.passos || data.steps || []);
 
         } catch (error) {
             console.error("Erro ao traçar rota:", error);
@@ -304,31 +302,31 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        steps.forEach((step, index) => {
+        steps.forEach((step) => {
             const card = document.createElement('div');
             card.className = 'step-card';
             card.innerHTML = `
                 <div class="step-icon"><i class="fa-solid fa-diamond-turn-right"></i></div>
                 <div class="step-info">
-                    <div class="step-instruction">${step.instruction}</div>
-                    <div class="step-distance">${step.distance_formatted}</div>
+                    <div class="step-instruction">${step.instrucao || step.instruction}</div>
+                    <div class="step-distance">${step.distancia_formatada || step.distance_formatted}</div>
                 </div>
             `;
 
-            // Ao clicar no passo, dá zoom na manobra correspondente
-            card.addEventListener('click', () => {
-                if (step.location) {
+            const loc = step.localizacao || step.location;
+            if (loc) {
+                card.addEventListener('click', () => {
                     if (stepMarker) map.removeLayer(stepMarker);
-                    stepMarker = L.circleMarker(step.location, {
+                    stepMarker = L.circleMarker(loc, {
                         radius: 8,
                         fillColor: '#fbbc04',
                         color: '#ffffff',
                         weight: 2,
                         fillOpacity: 0.9
                     }).addTo(map);
-                    map.flyTo(step.location, 17);
-                }
-            });
+                    map.flyTo(loc, 17);
+                });
+            }
 
             stepsList.appendChild(card);
         });
@@ -392,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setOriginPoint(lat, lon, `Minha Localização (${address.split(',')[0]})`);
                 btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
             },
-            (err) => {
+            () => {
                 showAlert("Não foi possível obter a sua localização atual.");
                 btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
             }
@@ -430,7 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const response = await fetch('/api/history');
             const data = await response.json();
-            renderHistory(data.history || []);
+            const list = data.history || (data.dados && data.dados.history) || [];
+            renderHistory(list);
         } catch (error) {
             console.error("Erro ao carregar histórico:", error);
         }
@@ -446,22 +445,32 @@ document.addEventListener('DOMContentLoaded', () => {
         items.forEach(item => {
             const div = document.createElement('div');
             div.className = 'history-item';
+            const oNome = item.origem_nome || item.origin_name || '';
+            const dNome = item.destino_nome || item.dest_name || '';
+            const dist = item.distancia_km || item.distance_km || 0;
+            const dur = item.duracao_minutos || item.duration_minutes || 0;
+            const criado = item.criado_em || item.created_at || '';
+
             div.innerHTML = `
                 <div class="history-item-route">
-                    <span>${item.origin_name.split(',')[0]}</span>
+                    <span>${oNome.split(',')[0]}</span>
                     <i class="fa-solid fa-arrow-right" style="font-size: 10px; color: #80868b;"></i>
-                    <span>${item.dest_name.split(',')[0]}</span>
+                    <span>${dNome.split(',')[0]}</span>
                 </div>
                 <div class="history-item-meta">
-                    <span>${item.distance_km} km (${item.duration_minutes} min)</span>
-                    <span>${item.created_at ? item.created_at.split(' ')[0] : ''}</span>
+                    <span>${dist} km (${dur} min)</span>
+                    <span>${criado ? criado.split(' ')[0] : ''}</span>
                 </div>
             `;
 
-            // Ao clicar no item do histórico, carrega no formulário e calcula rota
             div.addEventListener('click', () => {
-                setOriginPoint(item.origin_lat, item.origin_lon, item.origin_name);
-                setDestPoint(item.dest_lat, item.dest_lon, item.dest_name);
+                const oLat = item.origem_lat || item.origin_lat;
+                const oLon = item.origem_lon || item.origin_lon;
+                const dLat = item.destino_lat || item.dest_lat;
+                const dLon = item.destino_lon || item.dest_lon;
+
+                setOriginPoint(oLat, oLon, oNome);
+                setDestPoint(dLat, dLon, dNome);
                 historyPanel.classList.add('hidden');
                 calculateRoute();
             });
