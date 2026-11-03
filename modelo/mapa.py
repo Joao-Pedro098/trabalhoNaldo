@@ -1,6 +1,6 @@
 import requests
 from typing import List, Dict, Any, Optional
-from db.database import get_db_connection
+from db.database import get_db_connection, is_using_postgres
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org"
 OSRM_BASE_URL = "http://router.project-osrm.org/route/v1"
@@ -239,30 +239,52 @@ class MapaModelo:
     def salvar_historico(origem_nome: str, origem_lat: float, origem_lon: float,
                          dest_nome: str, dest_lat: float, dest_lon: float,
                          distancia_km: float, duracao_minutos: float) -> int:
-        """Salva a rota no banco SQLite."""
+        """Salva a rota no banco de dados (PostgreSQL ou SQLite)."""
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO historico_rotas 
-            (origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon, distancia_km, duracao_minutos)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (origem_nome, origem_lat, origem_lon, dest_nome, dest_lat, dest_lon, distancia_km, duracao_minutos))
-        novo_id = cursor.lastrowid
+
+        if is_using_postgres():
+            cursor.execute('''
+                INSERT INTO historico_rotas 
+                (origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon, distancia_km, duracao_minutos)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                RETURNING id;
+            ''', (origem_nome, origem_lat, origem_lon, dest_nome, dest_lat, dest_lon, distancia_km, duracao_minutos))
+            row = cursor.fetchone()
+            novo_id = row['id'] if isinstance(row, dict) else row[0]
+        else:
+            cursor.execute('''
+                INSERT INTO historico_rotas 
+                (origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon, distancia_km, duracao_minutos)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (origem_nome, origem_lat, origem_lon, dest_nome, dest_lat, dest_lon, distancia_km, duracao_minutos))
+            novo_id = cursor.lastrowid
+
         conn.commit()
         conn.close()
         return novo_id
 
     @staticmethod
     def listar_historico(limite: int = 10) -> List[Dict]:
-        """Obtém as últimas rotas calculadas."""
+        """Obtém as últimas rotas calculadas do PostgreSQL ou SQLite."""
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('''
-            SELECT id, origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon,
-                   distancia_km, duracao_minutos, criado_em
-            FROM historico_rotas
-            ORDER BY id DESC LIMIT ?
-        ''', (limite,))
+
+        if is_using_postgres():
+            cursor.execute('''
+                SELECT id, origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon,
+                       distancia_km, duracao_minutos, criado_em
+                FROM historico_rotas
+                ORDER BY id DESC LIMIT %s;
+            ''', (limite,))
+        else:
+            cursor.execute('''
+                SELECT id, origem_nome, origem_lat, origem_lon, destino_nome, destino_lat, destino_lon,
+                       distancia_km, duracao_minutos, criado_em
+                FROM historico_rotas
+                ORDER BY id DESC LIMIT ?;
+            ''', (limite,))
+
         linhas = cursor.fetchall()
         conn.close()
         return [dict(l) for l in linhas]
