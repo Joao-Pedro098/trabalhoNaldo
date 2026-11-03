@@ -3,7 +3,7 @@ from typing import List, Dict, Any, Optional
 from db.database import get_db_connection
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org"
-OSRM_URL = "http://router.project-osrm.org/route/v1/driving"
+OSRM_BASE_URL = "http://router.project-osrm.org/route/v1"
 USER_AGENT = "MiniGoogleMapsPython/1.0 (TrabalhoNaldo; contact=estudante@uf.br)"
 
 MANEUVER_TRANSLATIONS = {
@@ -104,13 +104,34 @@ class MapaModelo:
             return {"display_name": f"{lat:.5f}, {lon:.5f}", "lat": lat, "lon": lon}
 
     @staticmethod
-    def calcular_rota(origem_lat: float, origem_lon: float, dest_lat: float, dest_lon: float) -> Dict[str, Any]:
-        """Calcula rota viária, distância, tempo e manobras com OSRM."""
-        url = f"{OSRM_URL}/{origem_lon},{origem_lat};{dest_lon},{dest_lat}"
+    def calcular_rota(origem_lat: float, origem_lon: float,
+                      dest_lat: float, dest_lon: float,
+                      modo: str = "carro") -> Dict[str, Any]:
+        """
+        Calcula rotas (incluindo alternativas e diferentes modais:
+        carro, moto, transporte público, a pé, bicicleta).
+        """
+        # Mapeamento do modal para o perfil do OSRM
+        perfil_osrm = "driving"
+        fator_tempo = 1.0
+
+        if modo in ("bicicleta", "bike"):
+            perfil_osrm = "bike"
+        elif modo in ("a_pe", "walk", "pe"):
+            perfil_osrm = "foot"
+        elif modo == "moto":
+            perfil_osrm = "driving"
+            fator_tempo = 0.85  # Motos no Brasil são ~15% mais ágeis no trânsito urbano
+        elif modo == "transporte":
+            perfil_osrm = "driving"
+            fator_tempo = 1.40  # Ônibus com paradas e embarque
+
+        url = f"{OSRM_BASE_URL}/{perfil_osrm}/{origem_lon},{origem_lat};{dest_lon},{dest_lat}"
         params = {
             "overview": "full",
             "geometries": "geojson",
-            "steps": "true"
+            "steps": "true",
+            "alternatives": "true"
         }
 
         try:
@@ -118,16 +139,24 @@ class MapaModelo:
             data = resp.json()
 
             if data.get("code") != "Ok" or not data.get("routes"):
-                return {"sucesso": False, "erro": "Nenhuma rota viária encontrada entre os pontos."}
+                return {"sucesso": False, "erro": "Nenhuma rota encontrada para este meio de transporte."}
 
-            rota = data["routes"][0]
-            distancia_m = rota.get("distance", 0)
-            duracao_s = rota.get("duration", 0)
-            geometria = rota.get("geometry", {}).get("coordinates", [])
+            rotas_formatadas = []
+            for idx, r in enumerate(data["routes"]):
+                distancia_m = r.get("distance", 0)
+                duracao_s = r.get("duration", 0) * fator_tempo
+                geometria = r.get("geometry", {}).get("coordinates", [])
 
-            # Manobras passo a passo
-            passos = []
-            for leg in rota.get("legs", []):
+                # Resumo da rota (ex: "via Rod. Dr. Faisal Salmen")
+                leg = r.get("legs", [{}])[0]
+                summary_raw = leg.get("summary", "")
+                if summary_raw:
+                    via_nome = f"via {summary_raw}"
+                else:
+                    via_nome = f"Opção {idx + 1}"
+
+                # Manobras passo a passo
+                passos = []
                 for step in leg.get("steps", []):
                     instrucao = MapaModelo._formatar_manobra(step)
                     m_dist = step.get("distance", 0)
@@ -140,20 +169,71 @@ class MapaModelo:
                         "localizacao": [maneuver_loc[1], maneuver_loc[0]] if len(maneuver_loc) >= 2 else None
                     })
 
-            # Coordenadas [lat, lon] para Leaflet
-            coordenadas = [[c[1], c[0]] for c in geometria]
+                coordenadas = [[c[1], c[0]] for c in geometria]
+
+                rotas_formatadas.append({
+                    "id": idx,
+                    "modo": modo,
+                    "via": via_nome,
+                    "descricao": "Rota mais rápida, com trânsito normal" if idx == 0 else "Rota alternativa",
+                    "distancia_km": round(distancia_m / 1000, 2),
+                    "distancia_formatada": MapaModelo._formatar_distancia(distancia_m),
+                    "duracao_minutos": max(1, round(duracao_s / 60)),
+                    "duracao_formatada": MapaModelo._formatar_duracao(duracao_s),
+                    "coordenadas": coordenadas,
+                    "passos": passos
+                })
+
+            # Calcula estimativa rápida dos outros modos para exibir nas abas do topo
+            tempos_modos = MapaModelo._obter_estimativas_modais(origem_lat, origem_lon, dest_lat, dest_lon)
+
+            # Rota principal é a primeira
+            melhor_rota = rotas_formatadas[0]
 
             return {
                 "sucesso": True,
-                "distancia_km": round(distancia_m / 1000, 2),
-                "distancia_formatada": MapaModelo._formatar_distancia(distancia_m),
-                "duracao_minutos": round(duracao_s / 60),
-                "duracao_formatada": MapaModelo._formatar_duracao(duracao_s),
-                "coordenadas": coordenadas,
-                "passos": passos
+                "modo_selecionado": modo,
+                "melhor_rota": melhor_rota,
+                "rotas": rotas_formatadas,
+                "tempos_modais": tempos_modos,
+                # Mantém retrocompatibilidade direta
+                "distancia_km": melhor_rota["distancia_km"],
+                "distancia_formatada": melhor_rota["distancia_formatada"],
+                "duracao_minutos": melhor_rota["duracao_minutos"],
+                "duracao_formatada": melhor_rota["duracao_formatada"],
+                "coordenadas": melhor_rota["coordenadas"],
+                "passos": melhor_rota["passos"]
             }
         except Exception as e:
             return {"sucesso": False, "erro": f"Falha na comunicação com o serviço de rotas: {e}"}
+
+    @staticmethod
+    def _obter_estimativas_modais(origem_lat: float, origem_lon: float,
+                                  dest_lat: float, dest_lon: float) -> Dict[str, str]:
+        """Obtém tempos estimados rápidos para exibir nos botões de modal do topo."""
+        estimativas = {}
+        try:
+            # Consulta base de carro
+            url = f"{OSRM_BASE_URL}/driving/{origem_lon},{origem_lat};{dest_lon},{dest_lat}?overview=false"
+            r = requests.get(url, timeout=4).json()
+            if r.get("routes"):
+                segundos_carro = r["routes"][0].get("duration", 0)
+                distancia_m = r["routes"][0].get("distance", 0)
+
+                estimativas["carro"] = MapaModelo._formatar_duracao(segundos_carro)
+                estimativas["moto"] = MapaModelo._formatar_duracao(segundos_carro * 0.85)
+                estimativas["transporte"] = MapaModelo._formatar_duracao(segundos_carro * 1.40 + 300)
+                
+                # Velocidade média bicicleta: ~15 km/h
+                segundos_bike = (distancia_m / 1000) / 15 * 3600
+                estimativas["bicicleta"] = MapaModelo._formatar_duracao(segundos_bike)
+
+                # Velocidade média a pé: ~4.5 km/h
+                segundos_pe = (distancia_m / 1000) / 4.5 * 3600
+                estimativas["a_pe"] = MapaModelo._formatar_duracao(segundos_pe)
+        except Exception:
+            pass
+        return estimativas
 
     @staticmethod
     def salvar_historico(origem_nome: str, origem_lat: float, origem_lon: float,
@@ -225,7 +305,7 @@ class MapaModelo:
 
     @staticmethod
     def _formatar_duracao(segundos: float) -> str:
-        minutos = int(round(segundos / 60))
+        minutos = max(1, int(round(segundos / 60)))
         if minutos < 60:
             return f"{minutos} min"
         horas = minutos // 60

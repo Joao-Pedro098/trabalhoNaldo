@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PyMaps - Mini Google Maps em Python</title>
+    <title>Google Maps Clone - PyMaps (Padrão Naldo)</title>
     
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
@@ -23,108 +23,162 @@
     <!-- Container do Mapa Fullscreen -->
     <div id="map"></div>
 
-    <!-- Painel Lateral Estilo Google Maps -->
-    <aside class="sidebar" id="sidebar">
-        <!-- Cabeçalho do App -->
-        <div class="sidebar-header">
-            <div class="brand">
-                <i class="fa-solid fa-map-location-dot brand-icon"></i>
-                <span class="brand-title">PyMaps</span>
-                <span class="badge">Naldo MVC</span>
-            </div>
-            <div class="header-actions">
-                <button id="btn-toggle-history" title="Ver Histórico de Rotas" class="icon-btn">
-                    <i class="fa-solid fa-clock-rotate-left"></i>
-                </button>
-            </div>
+    <!-- Barra Estreita de Navegação Esquerda (Dock do Google Maps) -->
+    <nav class="left-dock">
+        <button class="dock-btn" title="Menu principal" id="btn-menu">
+            <i class="fa-solid fa-bars"></i>
+        </button>
+
+        <div class="dock-main-actions">
+            <button class="dock-btn active" title="Pesquisar e Rotas" id="btn-dock-routes">
+                <div class="dock-icon-circle">
+                    <i class="fa-solid fa-diamond-turn-right"></i>
+                </div>
+                <span>Rotas</span>
+            </button>
+            <button class="dock-btn" title="Lugares Salvos" id="btn-dock-saved">
+                <i class="fa-regular fa-bookmark"></i>
+                <span>Salvos</span>
+            </button>
+            <button class="dock-btn" title="Rotas Recentes / Histórico" id="btn-dock-history">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <span>Recentes</span>
+            </button>
         </div>
 
-        <!-- Painel de Formulário de Rota -->
-        <div class="route-panel">
-            <div class="inputs-group">
+        <div class="dock-bottom-actions">
+            <button class="dock-btn" title="Baixar aplicativo">
+                <i class="fa-solid fa-mobile-screen"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Painel Principal de Rotas Estilo Google Maps -->
+    <aside class="maps-panel" id="maps-panel">
+        
+        <!-- Barra Superior de Modos de Transporte (Carro, Moto, Transporte, A pé, Bicicleta) -->
+        <div class="mode-selector">
+            <button class="mode-tab active" data-mode="melhor" title="Melhor rota">
+                <i class="fa-solid fa-diamond-turn-right"></i>
+                <span class="mode-label">Melhor</span>
+            </button>
+            <button class="mode-tab" data-mode="carro" title="Carro">
+                <i class="fa-solid fa-car"></i>
+                <span class="mode-badge" id="badge-carro">--</span>
+            </button>
+            <button class="mode-tab" data-mode="moto" title="Moto">
+                <i class="fa-solid fa-motorcycle"></i>
+                <span class="mode-badge" id="badge-moto">--</span>
+            </button>
+            <button class="mode-tab" data-mode="transporte" title="Transporte público">
+                <i class="fa-solid fa-bus-simple"></i>
+                <span class="mode-badge" id="badge-transporte">--</span>
+            </button>
+            <button class="mode-tab" data-mode="a_pe" title="A pé">
+                <i class="fa-solid fa-person-walking"></i>
+                <span class="mode-badge" id="badge-a_pe">--</span>
+            </button>
+            <button class="mode-tab" data-mode="bicicleta" title="Bicicleta">
+                <i class="fa-solid fa-person-biking"></i>
+                <span class="mode-badge" id="badge-bicicleta">--</span>
+            </button>
+            <button class="mode-close-btn" id="btn-clear-all" title="Fechar rota">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <!-- Grupo de Inputs Origem e Destino com Conector -->
+        <div class="routing-inputs-box">
+            <div class="inputs-symbols">
+                <span class="circle-point">○</span>
+                <span class="dots-connector">⋮</span>
+                <span class="pin-point"><i class="fa-solid fa-location-dot"></i></span>
+            </div>
+
+            <div class="inputs-fields">
                 <!-- Origem -->
-                <div class="input-row">
-                    <div class="input-icon origin-icon">
-                        <i class="fa-solid fa-circle-dot"></i>
-                    </div>
-                    <div class="input-wrapper">
-                        <input type="text" id="origin-input" placeholder="Ponto de partida (A) ou clique no mapa" autocomplete="off">
-                        <div id="origin-suggestions" class="suggestions-dropdown hidden"></div>
-                    </div>
-                    <button id="btn-my-location" class="location-btn" title="Usar minha localização atual">
+                <div class="input-container">
+                    <input type="text" id="origin-input" placeholder="Escolha o ponto de partida ou clique no mapa" autocomplete="off">
+                    <button class="input-action-btn" id="btn-my-location" title="Usar minha localização">
                         <i class="fa-solid fa-crosshairs"></i>
                     </button>
-                </div>
-
-                <!-- Botão de Inverter Pontos -->
-                <div class="swap-row">
-                    <div class="swap-connector"></div>
-                    <button id="btn-swap-locations" class="swap-btn" title="Inverter origem e destino">
-                        <i class="fa-solid fa-arrow-down-up-across-line"></i>
-                    </button>
+                    <div id="origin-suggestions" class="suggestions-dropdown hidden"></div>
                 </div>
 
                 <!-- Destino -->
-                <div class="input-row">
-                    <div class="input-icon dest-icon">
-                        <i class="fa-solid fa-location-dot"></i>
-                    </div>
-                    <div class="input-wrapper">
-                        <input type="text" id="dest-input" placeholder="Destino (B) ou clique no mapa" autocomplete="off">
-                        <div id="dest-suggestions" class="suggestions-dropdown hidden"></div>
-                    </div>
+                <div class="input-container">
+                    <input type="text" id="dest-input" placeholder="Escolha o destino ou clique no mapa" autocomplete="off">
+                    <button class="input-action-btn" id="btn-search-dest" title="Buscar">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                    </button>
+                    <div id="dest-suggestions" class="suggestions-dropdown hidden"></div>
                 </div>
             </div>
 
-            <!-- Botões de Ação -->
-            <div class="action-buttons">
-                <button id="btn-calculate-route" class="btn btn-primary">
-                    <i class="fa-solid fa-route"></i> Traçar Rota
-                </button>
-                <button id="btn-clear-route" class="btn btn-secondary" title="Limpar rota e marcadores">
-                    <i class="fa-solid fa-trash-can"></i> Limpar
-                </button>
+            <!-- Botão de Inverter Pontos -->
+            <button class="btn-swap-points" id="btn-swap" title="Inverter partida e destino">
+                <i class="fa-solid fa-arrow-down-up-across-line"></i>
+            </button>
+        </div>
+
+        <!-- Linha de Ações: Adicionar Destino e Horário -->
+        <div class="routing-subactions">
+            <button class="subaction-btn" id="btn-add-destination" title="Adicionar parada intermediária">
+                <i class="fa-solid fa-circle-plus"></i> Adicionar destino
+            </button>
+            <div class="subaction-right">
+                <span class="depart-time"><i class="fa-regular fa-clock"></i> Sair agora <i class="fa-solid fa-caret-down"></i></span>
+                <span class="options-link">Opções</span>
             </div>
         </div>
 
-        <!-- Alerta de Notificação / Erros -->
+        <!-- Alerta de Notificações / Erros -->
         <div id="alert-box" class="alert hidden"></div>
 
-        <!-- Card de Resumo da Rota -->
-        <div id="route-summary" class="route-summary hidden">
-            <div class="summary-header">
-                <div class="summary-mode">
-                    <i class="fa-solid fa-car"></i> Carro (OSRM)
-                </div>
-                <div class="summary-time" id="summary-time">-- min</div>
-            </div>
-            <div class="summary-details">
-                <span class="summary-distance" id="summary-distance">-- km</span>
-                <span class="summary-traffic">Trânsito em tempo normal</span>
-            </div>
-
-            <!-- Botão expansor das instruções passo a passo -->
-            <button id="btn-toggle-steps" class="btn-toggle-steps">
-                <span>Instruções detalhadas do percurso</span>
-                <i class="fa-solid fa-chevron-down" id="steps-chevron"></i>
+        <!-- Barra de Ações Rápidas (Smartphone / Copiar Link) -->
+        <div class="quick-share-bar hidden" id="quick-share-bar">
+            <button class="share-link-btn" id="btn-share-phone">
+                <i class="fa-solid fa-mobile-screen-button"></i> Enviar rotas para seu smartphone
             </button>
-
-            <!-- Lista passo a passo (turn-by-turn) -->
-            <div id="steps-list" class="steps-list hidden"></div>
+            <button class="share-link-btn" id="btn-copy-link">
+                <i class="fa-solid fa-link"></i> Copiar link
+            </button>
         </div>
 
-        <!-- Painel de Histórico (gaveta) -->
-        <div id="history-panel" class="history-panel hidden">
-            <div class="history-header">
-                <h3><i class="fa-solid fa-history"></i> Histórico Recente</h3>
-                <button id="btn-clear-history-db" class="btn-text-danger" title="Apagar histórico">
-                    <i class="fa-solid fa-trash-arrow-up"></i> Limpar Tudo
-                </button>
+        <!-- Lista de Rotas Alternativas Calculadas (Exatamente igual ao Google Maps) -->
+        <div class="routes-container hidden" id="routes-container">
+            <div class="routes-list" id="routes-list">
+                <!-- Inserido dinamicamente via JS -->
             </div>
-            <div id="history-items" class="history-items">
+        </div>
+
+        <!-- Drawer de Detalhes Passo a Passo (Turn-by-turn) -->
+        <div class="steps-drawer hidden" id="steps-drawer">
+            <div class="steps-drawer-header">
+                <button class="btn-back-to-routes" id="btn-back-to-routes" title="Voltar para opções de rotas">
+                    <i class="fa-solid fa-arrow-left"></i>
+                </button>
+                <div class="steps-drawer-title">
+                    <h4 id="drawer-route-title">via Rua Principal</h4>
+                    <span id="drawer-route-meta">-- min (-- km)</span>
+                </div>
+            </div>
+            <div class="steps-drawer-body" id="steps-drawer-body">
+                <!-- Passos inseridos via JS -->
+            </div>
+        </div>
+
+        <!-- Painel de Histórico (Recentes) -->
+        <div class="history-drawer hidden" id="history-drawer">
+            <div class="history-drawer-header">
+                <h3><i class="fa-solid fa-clock-rotate-left"></i> Rotas Recentes</h3>
+                <button class="btn-clear-db" id="btn-clear-history-db">Limpar Tudo</button>
+            </div>
+            <div class="history-drawer-body" id="history-drawer-body">
                 <p class="empty-state">Nenhuma rota calculada ainda.</p>
             </div>
         </div>
+
     </aside>
 
     <!-- Menu de Contexto do Botão Direito no Mapa -->

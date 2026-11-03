@@ -49,8 +49,9 @@ class MapaControle:
 
         origem_nome = dados.get('origin_name') or f"{origem_lat:.4f}, {origem_lon:.4f}"
         dest_nome = dados.get('dest_name') or f"{dest_lat:.4f}, {dest_lon:.4f}"
+        modo = dados.get('modo', 'carro')
 
-        resultado = MapaModelo.calcular_rota(origem_lat, origem_lon, dest_lat, dest_lon)
+        resultado = MapaModelo.calcular_rota(origem_lat, origem_lon, dest_lat, dest_lon, modo=modo)
 
         if not resultado.get("sucesso"):
             return resposta_erro(resultado.get("erro", "Não foi possível traçar a rota."))
