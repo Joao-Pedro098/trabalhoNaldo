@@ -1,0 +1,560 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Roboto', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background-color: #f1f3f4;
+}
+
+/* Container do Mapa */
+#map {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 1;
+}
+
+/* Painel Lateral Flutuante */
+.sidebar {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    width: 410px;
+    max-height: calc(100vh - 32px);
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15), 0 1px 3px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+@media (max-width: 600px) {
+    .sidebar {
+        top: 0;
+        left: 0;
+        width: 100%;
+        max-height: 85vh;
+        border-radius: 0 0 16px 16px;
+    }
+}
+
+/* Cabeçalho */
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    border-bottom: 1px solid #ebebeb;
+    background: #fafbfc;
+}
+
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.brand-icon {
+    font-size: 20px;
+    color: #1a73e8;
+}
+
+.brand-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #202124;
+}
+
+.badge {
+    background: #e8f0fe;
+    color: #1a73e8;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 10px;
+}
+
+.icon-btn {
+    background: transparent;
+    border: none;
+    color: #5f6368;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: background 0.2s, color 0.2s;
+}
+
+.icon-btn:hover {
+    background: #e8eaed;
+    color: #1a73e8;
+}
+
+/* Formulário de Rota */
+.route-panel {
+    padding: 16px 18px;
+}
+
+.inputs-group {
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+}
+
+.input-icon {
+    font-size: 16px;
+    width: 24px;
+    text-align: center;
+}
+
+.origin-icon {
+    color: #1e8e3e;
+}
+
+.dest-icon {
+    color: #d93025;
+}
+
+.input-wrapper {
+    flex: 1;
+    position: relative;
+}
+
+.input-wrapper input {
+    width: 100%;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: #202124;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-wrapper input:focus {
+    border-color: #1a73e8;
+    box-shadow: 0 0 0 2px rgba(26, 115, 232, 0.2);
+}
+
+.location-btn {
+    background: #f1f3f4;
+    border: 1px solid #dadce0;
+    color: #5f6368;
+    border-radius: 8px;
+    padding: 9px 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.location-btn:hover {
+    background: #e8f0fe;
+    color: #1a73e8;
+    border-color: #1a73e8;
+}
+
+/* Linha de inversão */
+.swap-row {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    margin-left: 11px;
+}
+
+.swap-connector {
+    width: 2px;
+    height: 100%;
+    background: repeating-linear-gradient(to bottom, #dadce0 0, #dadce0 3px, transparent 3px, transparent 6px);
+}
+
+.swap-btn {
+    margin-left: 10px;
+    background: none;
+    border: none;
+    color: #70757a;
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.swap-btn:hover {
+    color: #1a73e8;
+    background: #f1f3f4;
+}
+
+/* Sugestões de Auto-completar */
+.suggestions-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1100;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.suggestion-item {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: #3c4043;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid #f1f3f4;
+}
+
+.suggestion-item:last-child {
+    border-bottom: none;
+}
+
+.suggestion-item:hover {
+    background: #f8f9fa;
+    color: #1a73e8;
+}
+
+.suggestion-item i {
+    color: #80868b;
+    font-size: 12px;
+}
+
+/* Botões de Ação */
+.action-buttons {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.btn {
+    flex: 1;
+    padding: 10px 14px;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.2s, box-shadow 0.2s;
+}
+
+.btn-primary {
+    background: #1a73e8;
+    color: #ffffff;
+    box-shadow: 0 1px 3px rgba(26, 115, 232, 0.3);
+}
+
+.btn-primary:hover {
+    background: #1557b0;
+}
+
+.btn-secondary {
+    background: #f1f3f4;
+    color: #3c4043;
+    flex: 0 0 auto;
+}
+
+.btn-secondary:hover {
+    background: #e8eaed;
+}
+
+/* Alertas */
+.alert {
+    margin: 0 18px 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+}
+
+.alert-error {
+    background: #fce8e6;
+    color: #c5221f;
+    border: 1px solid #fad2cf;
+}
+
+.alert-info {
+    background: #e8f0fe;
+    color: #1a73e8;
+    border: 1px solid #d2e3fc;
+}
+
+/* Resumo da Rota */
+.route-summary {
+    border-top: 1px solid #ebebeb;
+    padding: 16px 18px;
+    background: #ffffff;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.summary-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+}
+
+.summary-mode {
+    font-size: 14px;
+    font-weight: 500;
+    color: #5f6368;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.summary-time {
+    font-size: 26px;
+    font-weight: 700;
+    color: #188038;
+}
+
+.summary-details {
+    display: flex;
+    gap: 12px;
+    font-size: 14px;
+    color: #5f6368;
+    margin-top: 4px;
+}
+
+.summary-distance {
+    font-weight: 700;
+    color: #3c4043;
+}
+
+.btn-toggle-steps {
+    width: 100%;
+    margin-top: 14px;
+    padding: 9px 12px;
+    background: #f8f9fa;
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #1a73e8;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: background 0.2s;
+}
+
+.btn-toggle-steps:hover {
+    background: #e8f0fe;
+}
+
+/* Lista Passo a Passo */
+.steps-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.step-card {
+    display: flex;
+    gap: 10px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+    border-left: 3px solid #1a73e8;
+}
+
+.step-card:hover {
+    background: #eef3fc;
+    transform: translateX(2px);
+}
+
+.step-icon {
+    font-size: 14px;
+    color: #1a73e8;
+    margin-top: 2px;
+}
+
+.step-info {
+    flex: 1;
+}
+
+.step-instruction {
+    font-size: 13px;
+    font-weight: 500;
+    color: #202124;
+}
+
+.step-distance {
+    font-size: 11px;
+    color: #70757a;
+    margin-top: 2px;
+}
+
+/* Painel de Histórico */
+.history-panel {
+    border-top: 1px solid #ebebeb;
+    padding: 16px 18px;
+    background: #fafbfc;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.history-header h3 {
+    font-size: 14px;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-text-danger {
+    background: none;
+    border: none;
+    color: #d93025;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.btn-text-danger:hover {
+    text-decoration: underline;
+}
+
+.history-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 260px;
+    overflow-y: auto;
+}
+
+.history-item {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.history-item:hover {
+    border-color: #1a73e8;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.history-item-route {
+    font-size: 13px;
+    font-weight: 500;
+    color: #202124;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.history-item-meta {
+    font-size: 11px;
+    color: #70757a;
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.empty-state {
+    font-size: 13px;
+    color: #80868b;
+    text-align: center;
+    padding: 20px 0;
+}
+
+/* Menu de Contexto (botão direito no mapa) */
+.context-menu {
+    position: absolute;
+    background: #ffffff;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    z-index: 2000;
+    padding: 4px 0;
+    min-width: 190px;
+}
+
+.context-menu button {
+    width: 100%;
+    background: none;
+    border: none;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 13px;
+    color: #3c4043;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.context-menu button:hover {
+    background: #f1f3f4;
+    color: #1a73e8;
+}
+
+.origin-color { color: #1e8e3e; }
+.dest-color { color: #d93025; }
+
+.hidden {
+    display: none !important;
+}
+
+/* Custom Marker Pins */
+.custom-pin {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: white;
+    font-weight: 700;
+    font-size: 14px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    border: 2px solid white;
+}
+
+.custom-pin-origin {
+    background-color: #1e8e3e;
+}
+
+.custom-pin-dest {
+    background-color: #d93025;
+}
