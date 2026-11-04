@@ -111,16 +111,138 @@ html, body {
     transition: all 0.2s ease;
 }
 
-@media (max-width: 600px) {
+/* ==========================================================
+   RESPONSIVIDADE MOBILE (TELAS ATÉ 768px)
+   ========================================================== */
+.mobile-toggle-bar {
+    display: none;
+}
+
+.map-floating-controls {
+    position: absolute;
+    bottom: 24px;
+    right: 16px;
+    z-index: 1050;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.fab-location {
+    width: 48px;
+    height: 48px;
+    background: #ffffff;
+    border: none;
+    border-radius: 50%;
+    color: #1a73e8;
+    font-size: 18px;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.22);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s, background 0.15s;
+}
+
+.fab-location:hover {
+    background: #f8f9fa;
+    transform: scale(1.05);
+}
+
+.fab-open-panel {
+    background: #1a73e8;
+    color: #ffffff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 24px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: transform 0.15s;
+}
+
+.fab-open-panel:hover {
+    background: #1557b0;
+    transform: scale(1.03);
+}
+
+@media (max-width: 768px) {
     .left-dock {
-        display: none;
+        display: none !important;
     }
+
     .maps-panel {
         top: 0;
         left: 0;
         width: 100%;
-        max-height: 90vh;
-        border-radius: 0 0 16px 16px;
+        height: auto;
+        max-height: 82vh;
+        border-radius: 0 0 18px 18px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+        transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Quando recolhido no celular, deixa 85% da tela livre para o mapa */
+    .maps-panel.collapsed {
+        max-height: 52px;
+        overflow: hidden;
+    }
+
+    .maps-panel.collapsed .routing-inputs-box,
+    .maps-panel.collapsed .routing-subactions,
+    .maps-panel.collapsed .quick-share-bar,
+    .maps-panel.collapsed .routes-container,
+    .maps-panel.collapsed .steps-drawer,
+    .maps-panel.collapsed .history-drawer {
+        display: none !important;
+    }
+
+    .mobile-toggle-bar {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 8px 0;
+        background: #f8f9fa;
+        border-top: 1px solid #ebebeb;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .mobile-handle-pill {
+        width: 36px;
+        height: 4px;
+        background: #dadce0;
+        border-radius: 4px;
+        margin-bottom: 4px;
+    }
+
+    .mobile-toggle-text {
+        font-size: 11px;
+        color: #5f6368;
+        font-weight: 500;
+    }
+
+    .input-container input {
+        font-size: 15px; /* Evita auto-zoom indesejado em iOS/Android */
+        height: 42px;
+    }
+
+    .mode-selector {
+        padding: 4px 8px;
+    }
+
+    .mode-tab {
+        padding: 6px 8px;
+        min-width: 44px;
+    }
+
+    .routes-container {
+        max-height: 45vh;
     }
 }
 

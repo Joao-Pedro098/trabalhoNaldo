@@ -84,3 +84,13 @@ class MapaControle:
         """Limpa o histórico de rotas salvas."""
         MapaModelo.limpar_historico()
         return resposta_sucesso(mensagem="Histórico apagado com sucesso.")
+
+    @staticmethod
+    def obter_localizacao_atual():
+        """Obtém a localização atual por IP (garante funcionamento sem HTTPS)."""
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        if ip and ',' in ip:
+            ip = ip.split(',')[0].strip()
+        resultado = MapaModelo.obter_localizacao_ip(ip)
+        return resposta_sucesso(resultado)
+

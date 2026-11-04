@@ -382,7 +382,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }).addTo(map);
 
             routeLayers.push(mainLine);
-            map.fitBounds(mainLine.getBounds(), { padding: [60, 60] });
+            const padding = window.innerWidth <= 768 ? [25, 25] : [60, 60];
+            map.fitBounds(mainLine.getBounds(), { padding });
         }
     }
 
@@ -495,26 +496,105 @@ document.addEventListener('DOMContentLoaded', () => {
         hideAlert();
     });
 
-    btnMyLocation.addEventListener('click', () => {
+    // ==========================================
+    // GEOLOCALIZAÇÃO ROBUSTA (GPS + FALLBACK IP)
+    // ==========================================
+    async function getMyLocation() {
+        btnMyLocation.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+        const fabLocation = document.getElementById('fab-my-location');
+        if (fabLocation) fabLocation.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
+        const applyLocation = async (lat, lon, label) => {
+            const addr = await reverseGeocode(lat, lon);
+            const display = label || `Minha Localização (${addr.split(',')[0]})`;
+            setOriginPoint(lat, lon, display);
+            map.flyTo([lat, lon], 15);
+            btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+            if (fabLocation) fabLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+        };
+
+        const tryFallbackIP = async () => {
+            try {
+                const res = await fetch('/api/my-location');
+                const data = await res.json();
+                const d = data.dados || data;
+                if (d && d.lat && d.lon) {
+                    await applyLocation(d.lat, d.lon, `Minha Localização (${d.cidade || 'Rede'})`);
+                    showAlert("Localização obtida pela rede IP (HTTPS desativado no navegador).", "info");
+                    return;
+                }
+            } catch (e) {
+                console.error("Erro no fallback IP:", e);
+            }
+            showAlert("Não foi possível obter sua localização. Clique no mapa para definir o ponto de partida.");
+            btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+            if (fabLocation) fabLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+        };
+
+        // Se o navegador não suportar ou estiver bloqueando em conexões HTTP
         if (!navigator.geolocation) {
-            showAlert("Geolocalização não suportada.");
+            await tryFallbackIP();
             return;
         }
-        btnMyLocation.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+
         navigator.geolocation.getCurrentPosition(
             async (pos) => {
-                const lat = pos.coords.latitude;
-                const lon = pos.coords.longitude;
-                const addr = await reverseGeocode(lat, lon);
-                setOriginPoint(lat, lon, `Minha Localização (${addr.split(',')[0]})`);
-                btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
+                await applyLocation(pos.coords.latitude, pos.coords.longitude);
             },
-            () => {
-                showAlert("Não foi possível obter sua localização.");
-                btnMyLocation.innerHTML = '<i class="fa-solid fa-crosshairs"></i>';
-            }
+            async (err) => {
+                console.warn("GPS do navegador bloqueado ou falhou. Usando IP fallback.", err);
+                await tryFallbackIP();
+            },
+            { enableHighAccuracy: true, timeout: 6000, maximumAge: 60000 }
         );
-    });
+    }
+
+    btnMyLocation.addEventListener('click', getMyLocation);
+
+    const fabLocation = document.getElementById('fab-my-location');
+    if (fabLocation) {
+        fabLocation.addEventListener('click', getMyLocation);
+    }
+
+    // ==========================================
+    // CONTROLES DE RECOLHER / EXPANDIR NO MOBILE
+    // ==========================================
+    const mapsPanel = document.getElementById('maps-panel');
+    const mobileToggleBtn = document.getElementById('mobile-toggle-btn');
+    const mobileToggleText = document.getElementById('mobile-toggle-text');
+    const fabOpenPanel = document.getElementById('fab-open-panel');
+
+    function toggleMobilePanel(forceState = null) {
+        if (!mapsPanel) return;
+        const isCollapsed = forceState !== null ? forceState : !mapsPanel.classList.contains('collapsed');
+        mapsPanel.classList.toggle('collapsed', isCollapsed);
+        if (fabOpenPanel) fabOpenPanel.classList.toggle('hidden', !isCollapsed);
+
+        if (mobileToggleText) {
+            mobileToggleText.innerHTML = isCollapsed 
+                ? '<i class="fa-solid fa-chevron-down"></i> Expandir opções de rotas' 
+                : '<i class="fa-solid fa-chevron-up"></i> Recolher para ver o mapa';
+        }
+    }
+
+    if (mobileToggleBtn) {
+        mobileToggleBtn.addEventListener('click', () => toggleMobilePanel());
+    }
+    if (fabOpenPanel) {
+        fabOpenPanel.addEventListener('click', () => toggleMobilePanel(false));
+    }
+
+    // Inicialização: detecta a cidade inicial por IP para não começar longe
+    fetch('/api/my-location')
+        .then(r => r.json())
+        .then(data => {
+            const d = data.dados || data;
+            if (d && d.lat && d.lon && !origin && !dest) {
+                map.setView([d.lat, d.lon], 13);
+            }
+        })
+        .catch(() => {});
+
 
     btnCopyLink.addEventListener('click', () => {
         if (!origin || !dest) return;

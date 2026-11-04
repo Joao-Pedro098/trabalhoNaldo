@@ -179,7 +179,23 @@
             </div>
         </div>
 
+        <!-- Alça / Botão de Recolher e Expandir no Mobile -->
+        <div class="mobile-toggle-bar" id="mobile-toggle-btn">
+            <span class="mobile-handle-pill"></span>
+            <span class="mobile-toggle-text" id="mobile-toggle-text"><i class="fa-solid fa-chevron-up"></i> Recolher para ver o mapa</span>
+        </div>
+
     </aside>
+
+    <!-- Botões Flutuantes sobre o Mapa (Estilo Google Maps) -->
+    <div class="map-floating-controls">
+        <button class="fab-location" id="fab-my-location" title="Sua localização atual">
+            <i class="fa-solid fa-crosshairs"></i>
+        </button>
+        <button class="fab-open-panel hidden" id="fab-open-panel">
+            <i class="fa-solid fa-route"></i> Ver Rotas
+        </button>
+    </div>
 
     <!-- Menu de Contexto do Botão Direito no Mapa -->
     <div id="context-menu" class="context-menu hidden">

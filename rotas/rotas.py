@@ -28,3 +28,8 @@ def get_historico():
 @rotas_bp.route('/api/history', methods=['DELETE'])
 def delete_historico():
     return MapaControle.apagar_historico()
+
+@rotas_bp.route('/api/my-location', methods=['GET'])
+def localizacao_atual():
+    return MapaControle.obter_localizacao_atual()
+

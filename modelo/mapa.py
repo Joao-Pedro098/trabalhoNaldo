@@ -98,12 +98,49 @@ class MapaModelo:
                     "lat": lat,
                     "lon": lon
                 }
-            return {"display_name": f"{lat:.5f}, {lon:.5f}", "lat": lat, "lon": lon}
         except Exception as e:
             print(f"[MapaModelo] Erro na geocodificação reversa: {e}")
             return {"display_name": f"{lat:.5f}, {lon:.5f}", "lat": lat, "lon": lon}
 
     @staticmethod
+    def obter_localizacao_ip(ip: Optional[str] = None) -> Dict:
+        """
+        Obtém a localização geográfica baseada no IP de rede.
+        Essencial como fallback quando o navegador não está em HTTPS e bloqueia o GPS.
+        """
+        url = f"http://ip-api.com/json/{ip}" if ip and ip not in ("127.0.0.1", "localhost", "") else "http://ip-api.com/json/"
+        try:
+            resp = requests.get(url, timeout=5)
+            data = resp.json()
+            if data.get("status") == "success":
+                lat = float(data.get("lat"))
+                lon = float(data.get("lon"))
+                cidade = data.get("city", "Minha Cidade")
+                regiao = data.get("regionName", "")
+
+                rev = MapaModelo.geocodificar_reverso(lat, lon)
+                nome = rev.get("display_name") if rev else f"{cidade}, {regiao}"
+                return {
+                    "sucesso": True,
+                    "lat": lat,
+                    "lon": lon,
+                    "cidade": cidade,
+                    "display_name": nome
+                }
+        except Exception as e:
+            print(f"[MapaModelo] Erro no IP-API: {e}")
+
+        # Fallback padrão (Parauapebas / PA)
+        return {
+            "sucesso": True,
+            "lat": -6.0673,
+            "lon": -49.9056,
+            "cidade": "Parauapebas",
+            "display_name": "Parauapebas, Pará, Brasil"
+        }
+
+    @staticmethod
+
     def calcular_rota(origem_lat: float, origem_lon: float,
                       dest_lat: float, dest_lon: float,
                       modo: str = "carro") -> Dict[str, Any]:
