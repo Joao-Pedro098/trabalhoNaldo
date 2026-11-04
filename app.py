@@ -15,7 +15,7 @@ app.register_blueprint(rotas_bp)
 if __name__ == '__main__':
     print("=" * 60)
     print("📍 Mini Google Maps (Padrão Naldo) inicializado!")
-    print("🌐 Acesse no seu navegador: http://localhost:5000")
+    print("🌐 Acesse no seu navegador: http://192.168.0.147:5000")
     print("⚙️  Executando em 0.0.0.0:5000")
     print("=" * 60)
     app.run(host='0.0.0.0', port=5000, debug=True)
