@@ -1,0 +1,30 @@
+{
+  "nome": "Coquimbo, Chile",
+  "epicentros": {
+    "arquivo": "epicentros_coquimbo.geojson",
+    "fonte": "USGS",
+    "bbox": {
+      "sul": -32.65,
+      "oeste": -71.99,
+      "norte": -28.66,
+      "leste": -69.54
+    },
+    "parametros": {
+      "inicio": "2016-11-17",
+      "fim": "2026-11-17",
+      "min_mag": 2.5
+    },
+    "quantidade": 984
+  },
+  "falhas": {
+    "arquivo": "falhas_gem_coquimbo.geojson",
+    "fonte": "GEM GAF-DB",
+    "bbox": {
+      "sul": -32.6,
+      "oeste": -72.3,
+      "norte": -28.7,
+      "leste": -68.5
+    },
+    "quantidade": 13
+  }
+}

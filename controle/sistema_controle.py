@@ -1,6 +1,7 @@
 from flask import render_template, request
 
 from controle.respostas import resposta_erro, resposta_sucesso
+from modelo import demo
 from modelo.geocodificacao import GeocodificacaoModelo
 from modelo.sistema import SistemaModelo
 
@@ -40,6 +41,16 @@ class SistemaControle:
             return resposta_sucesso(SistemaModelo.resumo())
         except Exception as e:
             return resposta_erro(f"Falha ao consultar o banco: {e}", status=500)
+
+    @staticmethod
+    def carregar_demo():
+        try:
+            r = demo.carregar()
+        except FileNotFoundError:
+            return resposta_erro("Arquivos de demonstração não encontrados em data/demo.", status=500)
+        msg = (f"Demonstração carregada ({r['regiao']}): {r['epicentros']['recebidos']} epicentros e "
+               f"{r['falhas']['recebidos']} falhas.")
+        return resposta_sucesso(r, mensagem=msg)
 
     @staticmethod
     def listar_analises():

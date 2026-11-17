@@ -19,6 +19,49 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     camadasBase['Relevo'].addTo(map);
 
+    // Mapa base OFFLINE: contornos dos países (Natural Earth, domínio público) servidos
+    // pelo próprio sistema. Carregado só quando necessário (1,7 MB).
+    const COR_OCEANO_OFFLINE = '#d6e6f2';
+    // Painel próprio logo acima dos mosaicos (tilePane = 200) e abaixo de tudo o mais:
+    // no painel padrão os países (preenchimento opaco) cobririam os epicentros.
+    map.createPane('baseOffline').style.zIndex = 250;
+    const camadaOffline = L.geoJSON(null, {
+        pane: 'baseOffline',
+        style: { color: '#8a8f95', weight: 0.8, fillColor: '#f4f1ea', fillOpacity: 1 },
+        interactive: false,
+        attribution: 'Contornos: Natural Earth (domínio público)'
+    });
+    let offlineCarregado = false;
+    camadaOffline.on('add', async () => {
+        map.getContainer().style.background = COR_OCEANO_OFFLINE;
+        if (offlineCarregado) return;
+        offlineCarregado = true;
+        try {
+            const resp = await fetch('/static/data/paises_ne50m.geojson');
+            camadaOffline.addData(await resp.json());
+        } catch {
+            offlineCarregado = false;
+        }
+    });
+    camadaOffline.on('remove', () => { map.getContainer().style.background = ''; });
+    camadasBase['Offline (contornos)'] = camadaOffline;
+
+    // Sem internet os mosaicos falham: troca sozinho para o mapa offline
+    let falhasMosaico = 0, mosaicosOk = 0, trocouOffline = false;
+    Object.entries(camadasBase).forEach(([nome, camada]) => {
+        if (camada === camadaOffline) return;
+        camada.on('tileload', () => { mosaicosOk++; });
+        camada.on('tileerror', () => {
+            falhasMosaico++;
+            if (!trocouOffline && mosaicosOk === 0 && falhasMosaico >= 6 && map.hasLayer(camada)) {
+                trocouOffline = true;
+                map.removeLayer(camada);
+                camadaOffline.addTo(map);
+                window.SF?.showAlert('Sem conexão com o servidor de mapas: usando o mapa offline (contornos dos países).', 'info');
+            }
+        });
+    });
+
     // Camadas de dados: preenchidas nas próximas fases (epicentros, falhas, buffers...)
     // Falhas ficam por cima dos epicentros (overlayPane = 400): linhas finas cobrem pouco
     // e ficariam escondidas sob os círculos.
@@ -460,6 +503,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const AREA_GRANDE_GRAUS = 20;
+    $('btn-demo').addEventListener('click', () => {
+        comCarregamento($('btn-demo'), '', async () => {
+            const data = await api('/api/demo', { method: 'POST' });
+            showAlert(data.mensagem, 'info');
+            const b = data.bbox;
+            const { esquerda, topo } = areaCobertaPeloPainel();
+            map.flyToBounds([[b.sul, b.oeste], [b.norte, b.leste]],
+                { paddingTopLeft: [esquerda + 30, topo + 30], paddingBottomRight: [30, 30] });
+            await carregarStatus();
+        });
+    });
+
     $('btn-importar-gem').addEventListener('click', () => {
         const bbox = bboxVisivel();
         if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }

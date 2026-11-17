@@ -29,6 +29,12 @@ def minha_localizacao():
     return SistemaControle.localizacao_atual()
 
 
+# ---- Dados de demonstração (offline) ----
+@rotas_bp.route("/api/demo", methods=["POST"])
+def carregar_demo():
+    return SistemaControle.carregar_demo()
+
+
 # ---- Estado do sistema ----
 @rotas_bp.route("/api/status", methods=["GET"])
 def status():

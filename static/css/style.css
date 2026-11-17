@@ -694,6 +694,24 @@ html, body {
 .importacoes-lista strong { display: block; font-weight: 500; }
 .importacoes-lista small { color: var(--texto-2); }
 
+/* Cartão de dados de demonstração */
+.demo-card {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    border: 1px dashed var(--borda);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.demo-card > i { color: var(--accent); font-size: 16px; }
+.demo-card div { flex: 1; min-width: 0; }
+.demo-card strong { display: block; font-weight: 500; }
+.demo-card small { color: var(--texto-2); line-height: 1.4; }
+.demo-card .btn-secondary { flex: none; padding: 0 14px; height: 32px; }
+
 /* Legenda do mapa */
 .map-legend {
     background: rgba(255, 255, 255, 0.95);

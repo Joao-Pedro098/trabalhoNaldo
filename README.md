@@ -1,173 +1,173 @@
-# 🌋 SismoFalhas — Correlação espacial entre falhas e epicentros
+# 🌋 SismoFalhas — Correlação espacial entre falhas mapeadas e epicentros registrados
 
-Sistema web que cruza **falhas geológicas mapeadas** com **epicentros de sismos registrados** para responder à pergunta: *os sismos ocorrem mais perto das falhas do que o acaso explicaria?*
+Sistema web que cruza **falhas geológicas mapeadas** com **epicentros de sismos registrados** e responde, com teste estatístico, à pergunta:
 
-Feito sobre a mesma stack e o mesmo padrão MVC do PyMaps (trabalhoNaldo): Flask, Leaflet, PostgreSQL com fallback para SQLite, executado numa VM Ubuntu Server e acessado pelo navegador do Windows.
+> *Os sismos ocorrem mais perto das falhas do que o acaso explicaria?*
+
+Construído sobre a mesma stack e o mesmo padrão MVC do PyMaps (trabalhoNaldo): **Flask + Leaflet + PostgreSQL** (com fallback para SQLite), executado numa VM Ubuntu Server e acessado pelo navegador do Windows. **Funciona sem internet** com os dados de demonstração.
 
 ---
 
-## 🏛️ Arquitetura
+## ⚡ Início rápido
+
+### Na VM (Ubuntu Server)
+```bash
+chmod +x setup_vm.sh
+./setup_vm.sh --demo            # instala, roda os testes e carrega a demonstração
+./venv/bin/python3 app.py
+```
+Com `--servico`, o sistema passa a iniciar sozinho junto com a VM (systemd). Acesse **http://&lt;IP-da-VM&gt;:5000** no navegador do Windows (o script mostra o IP no final).
+
+### No Windows (desenvolvimento)
+```bash
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
+venv\Scripts\python carregar_demo.py
+venv\Scripts\python app.py
+```
+Acesse **http://localhost:5000**.
+
+Requisitos: Python 3.10+. PostgreSQL é opcional (sem ele, o sistema usa SQLite em `db/sismo.db`).
+
+---
+
+## 🧭 Como usar (passo a passo)
+
+1. **Dados → Dados de demonstração → Carregar** (ou importe os seus):
+   - **Epicentros:** posicione o mapa e clique em *Importar da USGS* (período e magnitude mínima ajustáveis).
+   - **Falhas:** *Importar falhas do GEM* (base mundial, **não cobre o Brasil**) ou *Enviar arquivo* (GeoJSON ou shapefile .zip, ex.: SGB/CPRM).
+2. **Análise:** mantenha **Área importada** e **profundidade até 35 km**, e clique em **Rodar análise**.
+3. Leia o **cartão de conclusão** e confira a tabela de buffers, o histograma e as falhas com mais eventos. Clique numa linha da tabela para ver a zona no mapa; clique num epicentro para ver a distância e a linha até a falha.
+4. **Exporte** em CSV (Excel), GeoJSON (QGIS) ou JSON. A análise fica salva no **Histórico**.
+
+### Resultado de referência (demonstração)
+Coquimbo, Chile — 984 sismos M ≥ 2,5 (2016–2026), 13 falhas do GEM, sismos ≤ 35 km, 999 simulações:
+
+| Medida | Observado | Esperado ao acaso |
+|---|---|---|
+| Mediana da distância à falha | 65,5 km | 108,8 km (p = 0,001) |
+| Eventos a até 50 km de uma falha | 11,0% | 7,4% (1,49×, p ajustado = 0,016) |
+
+**Conclusão: associação espacial significativa.** A semente fixa torna o resultado reprodutível (verificado nos testes automáticos).
+
+---
+
+## 📐 Metodologia
+
+1. **Projeção:** azimutal equidistante centrada na área de estudo — distâncias em km com pouca distorção em escala regional (aviso acima de 2.500 km).
+2. **Distância observada:** de cada epicentro até a falha mais próxima (índice espacial STRtree). Falhas logo *fora* da área também contam.
+3. **Hipótese nula:** epicentros distribuídos uniformemente (na esfera) dentro da área de estudo.
+4. **Monte Carlo** (padrão 999 catálogos aleatórios do mesmo tamanho; semente fixa):
+   - **Mediana:** p = (1 + nº de simulações com mediana ≤ observada) / (n + 1).
+   - **Buffers** (5, 10, 20, 50 km): % observada × esperada e p-valor **com correção de Bonferroni** (p × nº de buffers), porque testar várias distâncias ao mesmo tempo inflaria o falso positivo.
+   - **Afastamento:** cauda oposta — só se conclui "mais longe" com p < 0,05.
+5. **Conclusão** (combina os dois testes, que respondem perguntas diferentes):
+
+| Conclusão | Quando |
+|---|---|
+| 🟢 Associação | Mediana menor que o acaso **e** excesso de eventos junto às falhas |
+| 🟢 Excesso local | Mediana igual ao acaso, mas excesso junto às falhas |
+| 🟡 Mais perto, sem excesso | Mais perto no geral, mas nada colado às falhas (típico de falha inclinada/subducção ou estrutura não mapeada) |
+| ⚪ Sem associação | Nada significativo |
+| ⚪ Afastamento | Epicentros significativamente mais longe que o acaso |
+
+6. **Complementos:** teste KS (diferença de *forma* das distribuições; informativo), Spearman magnitude × distância, ranking das falhas (eventos, magnitude máxima, energia `log₁₀E = 1,5M + 4,8`, eventos por 100 km).
+
+**Calibração verificada nos testes:** com epicentros realmente aleatórios, a taxa de falso positivo fica próxima dos 5% esperados (40 sementes), tanto para a mediana quanto para os buffers.
+
+---
+
+## ⚠️ Limitações e cuidados de interpretação
+
+- **Área de estudo muda o resultado.** A hipótese nula só é justa onde houve coleta de dados. Por isso o padrão é a **área importada** e toda análise informa a **cobertura** (% da área com sismos importados), com aviso abaixo de 95%. Exemplo real: em Coquimbo, uma área 36% maior que a importada levava a "mais perto, sem excesso"; com a área exata, "associação significativa".
+- **Falhas são traços em superfície.** Sismos profundos acontecem no plano inclinado da falha, longe do traço — use o filtro de profundidade (padrão ≤ 35 km). A distância é medida em 2D (epicentro × traço).
+- **Hipótese nula uniforme.** Não considera variações de detecção da rede sismográfica (ex.: oceano × continente).
+- **Bases incompletas.** O GEM não tem falhas no Brasil; falhas não mapeadas não aparecem na análise. Magnitudes de tipos diferentes (mb, Mw, ML) são tratadas igualmente na energia, que é aproximada.
+- **Correlação ≠ causalidade.** Proximidade estatística não prova qual falha gerou cada sismo.
+
+---
+
+## 🗂️ Dados e fontes
+
+| Dado | Fonte | Licença |
+|---|---|---|
+| Epicentros | [USGS FDSN Event API](https://earthquake.usgs.gov/fdsnws/event/1/) (até 20.000 eventos por importação) | Domínio público |
+| Falhas ativas | [GEM Global Active Faults](https://github.com/GEMScienceTools/gem-global-active-faults) — cache local de 30 dias em `data/cache/` | CC-BY-SA 4.0 (citar Styron & Pagani, 2020) |
+| Falhas do Brasil | Upload de arquivo (ex.: [GeoSGB / SGB-CPRM](https://geosgb.sgb.gov.br)) em coordenadas geográficas | Conforme a fonte |
+| Mapa offline | [Natural Earth](https://www.naturalearthdata.com) 1:50m (contornos dos países) | Domínio público |
+| Mapas online | OpenTopoMap, OpenStreetMap, Esri | Conforme cada serviço |
+| Busca de lugares | Nominatim (OpenStreetMap) | ODbL |
+
+Detalhes da demonstração em [`data/demo/LEIA-ME.md`](data/demo/LEIA-ME.md); bibliotecas de terceiros em [`static/vendor/LICENCAS.md`](static/vendor/LICENCAS.md).
+
+### Sem internet
+- Leaflet, Chart.js, Leaflet.heat e Font Awesome são servidos localmente (`static/vendor/`).
+- Se os mosaicos do mapa não carregarem, o sistema troca sozinho para **"Offline (contornos)"**.
+- A demonstração é carregada de `data/demo/`. Só a busca de lugares, a importação da USGS/GEM e os mapas de fundo online precisam de internet.
+
+---
+
+## 🏛️ Arquitetura (MVC)
 
 ```text
 sismoFalhas/
-├── controle/                  # CONTROLLER
-│   ├── sistema_controle.py    # Página, busca de região, localização, status, análises
-│   ├── epicentros_controle.py # Importação/consulta de epicentros (com validação)
-│   ├── falhas_controle.py     # Importação do GEM, upload de arquivo, consulta de falhas
-│   ├── analise_controle.py    # Validação e execução da análise de correlação
-│   └── respostas.py           # Respostas JSON padronizadas {sucesso, ...}
-├── db/
-│   └── database.py            # PostgreSQL ou SQLite; tabelas epicentros, falhas, analises, importacoes
-├── modelo/                    # MODEL
-│   ├── geocodificacao.py      # Nominatim (busca/reverso) e localização por IP
-│   ├── epicentro.py           # Persistência e consultas de epicentros
-│   ├── falha.py               # Persistência, consulta e categoria (mecanismo) das falhas
-│   ├── correlacao.py          # MOTOR: distâncias, Monte Carlo, buffers, KS, ranking (sem banco)
-│   ├── analise.py             # Carrega dados do banco, roda o motor e salva a análise
-│   ├── importacao.py          # Registro das áreas importadas e cálculo de cobertura
-│   ├── exportacao.py          # CSV (Excel pt-BR), GeoJSON (QGIS) e JSON da análise
-│   ├── fontes/usgs.py         # Cliente do catálogo FDSN da USGS
-│   ├── fontes/gem.py          # Base mundial de falhas ativas do GEM (com cache local)
-│   ├── fontes/arquivo_falhas.py # Leitura de GeoJSON e shapefile (.zip) enviados
-│   ├── fontes/geometria.py    # Normalização de linhas (2D, caixa, id estável)
-│   └── sistema.py             # Contagens e análises salvas
-├── rotas/
-│   └── rotas.py               # Endpoints HTTP (Blueprint)
-├── static/                    # CSS e JS: map.js (mapa, dados) e analise.js (painel da análise)
-├── templates/index.html       # VIEW
-├── tests/                     # pytest
-├── app.py                     # Ponto de entrada (porta 5000)
-├── setup_vm.sh                # Instalação no Ubuntu Server
-└── requirements.txt
+├── controle/                    # CONTROLLER — validação e orquestração
+│   ├── sistema_controle.py      # Página, busca de região, status, demonstração, histórico
+│   ├── epicentros_controle.py   # Importação/consulta de epicentros
+│   ├── falhas_controle.py       # GEM, upload de arquivo, consulta de falhas
+│   ├── analise_controle.py      # Análise, zona de buffer, exportação, importações
+│   └── respostas.py             # Respostas JSON padronizadas {sucesso, ...}
+├── modelo/                      # MODEL — regras, cálculos e persistência
+│   ├── correlacao.py            # MOTOR estatístico (sem banco nem rede)
+│   ├── analise.py               # Carrega do banco, roda o motor, salva
+│   ├── importacao.py            # Registro das áreas importadas e cobertura
+│   ├── exportacao.py            # CSV, GeoJSON e JSON
+│   ├── epicentro.py / falha.py  # Persistência; categoria da falha pelo mecanismo
+│   ├── demo.py                  # Dados de demonstração offline
+│   ├── geocodificacao.py        # Nominatim e localização por IP
+│   ├── sistema.py               # Contagens e histórico
+│   └── fontes/                  # usgs.py, gem.py, arquivo_falhas.py, geometria.py
+├── db/database.py               # PostgreSQL ou SQLite: epicentros, falhas, analises, importacoes
+├── rotas/rotas.py               # Endpoints HTTP (Blueprint)
+├── templates/index.html         # VIEW
+├── static/
+│   ├── js/map.js                # Mapa, camadas, importação, histórico
+│   ├── js/analise.js            # Painel da análise
+│   ├── css/style.css
+│   ├── vendor/                  # Bibliotecas locais (offline)
+│   └── data/                    # Contornos dos países (mapa offline)
+├── data/demo/                   # Dados de demonstração + LEIA-ME
+├── tests/                       # 75 testes (pytest)
+├── app.py                       # Ponto de entrada (porta 5000)
+├── carregar_demo.py             # Carrega a demonstração pela linha de comando
+└── setup_vm.sh                  # Instalação no Ubuntu Server (--demo, --servico)
 ```
 
-## 🔌 Endpoints
+## 🔌 API
 
 | Método | Rota | Descrição |
 |---|---|---|
 | GET | `/` | Interface web |
-| GET | `/api/regioes?q=` | Busca de lugares (com caixa da região) |
-| GET | `/api/reverso?lat=&lon=` | Nome do lugar nas coordenadas |
-| GET | `/api/minha-localizacao` | Localização aproximada por IP |
-| GET | `/api/status` | Banco em uso e contagem de registros |
-| POST | `/api/epicentros/importar` | Importa da USGS. Corpo: `{bbox:{sul,oeste,norte,leste}, inicio, fim, min_mag}` |
-| GET | `/api/epicentros?sul=&oeste=&norte=&leste=&min_mag=&inicio=&fim=&limite=` | Epicentros filtrados (maiores magnitudes primeiro) + total |
-| GET | `/api/epicentros/resumo` | Total, faixa de magnitude e período no banco |
-| DELETE | `/api/epicentros` | Apaga todos os epicentros |
-| POST | `/api/falhas/importar-gem` | Importa falhas do GEM na área. Corpo: `{bbox:{sul,oeste,norte,leste}}` |
-| POST | `/api/falhas/upload` | Envia arquivo (multipart: `arquivo` .geojson/.json/.zip, `fonte` opcional) |
-| GET | `/api/falhas?sul=&oeste=&norte=&leste=&limite=` | Falhas que cruzam a área (FeatureCollection) + total |
-| GET | `/api/falhas/fontes` | Quantidade de falhas por fonte |
-| DELETE | `/api/falhas?fonte=` | Apaga as falhas de uma fonte (ou todas, sem `fonte`) |
-| POST | `/api/analise` | Roda a análise (ver parâmetros abaixo) e salva |
-| GET | `/api/analises/<id>` | Resultado completo de uma análise salva |
-| GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas da análise (GeoJSON, recortada à área) |
-| DELETE | `/api/analises/<id>` | Apaga uma análise |
-| GET | `/api/analises/<id>/exportar?formato=csv\|geojson\|json` | Download do resultado |
-| GET | `/api/importacoes?tipo=epicentros\|falhas` | Áreas consultadas em cada importação |
-| GET / DELETE | `/api/analises` | Lista (com conclusão) / apaga todas as análises |
+| GET | `/api/status` | Banco em uso e contagens |
+| POST | `/api/demo` | Carrega os dados de demonstração (offline) |
+| GET | `/api/regioes?q=` · `/api/reverso?lat=&lon=` · `/api/minha-localizacao` | Navegação no mapa |
+| POST | `/api/epicentros/importar` | USGS. Corpo: `{bbox:{sul,oeste,norte,leste}, inicio, fim, min_mag}` |
+| GET / DELETE | `/api/epicentros` | Consulta (`sul, oeste, norte, leste, min_mag, inicio, fim, limite`) / apaga todos |
+| GET | `/api/epicentros/resumo` | Total, faixa de magnitude e período |
+| POST | `/api/falhas/importar-gem` | GEM na área. Corpo: `{bbox}` |
+| POST | `/api/falhas/upload` | Multipart: `arquivo` (.geojson/.json/.zip), `fonte` |
+| GET / DELETE | `/api/falhas` | Consulta por área (FeatureCollection) / apaga (`?fonte=`) |
+| GET | `/api/falhas/fontes` | Falhas por fonte |
+| GET | `/api/importacoes?tipo=` | Áreas consultadas em cada importação |
+| POST | `/api/analise` | Roda e salva a análise (parâmetros abaixo) |
+| GET / DELETE | `/api/analises` | Lista com conclusão / apaga todas |
+| GET / DELETE | `/api/analises/<id>` | Resultado completo / apaga uma |
+| GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas (GeoJSON) |
+| GET | `/api/analises/<id>/exportar?formato=` | `csv`, `geojson` ou `json` (download) |
 
-## 🗺️ Roteiro
+**`POST /api/analise`:** `bbox` (obrigatório), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
 
-| Fase | Entrega | Situação |
-|---|---|---|
-| 0 | Esqueleto, banco, interface base | ✅ |
-| 1 | Importação de epicentros (USGS) e camada no mapa | ✅ |
-| 2 | Importação de falhas (GEM / upload GeoJSON e shapefile) | ✅ |
-| 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ✅ |
-| 4 | Interface de análise (área, gráficos, mapa de calor) | ✅ |
-| 5 | Análises salvas e exportação CSV/GeoJSON | ✅ |
-| 6 | Acabamento, dados de demonstração offline | ⏳ |
-
----
-
-## 🌎 Epicentros (Fase 1)
-
-- **Fonte:** [USGS FDSN Event API](https://earthquake.usgs.gov/fdsnws/event/1/), sem chave. Até 20.000 eventos por importação; acima disso o sistema pede para aumentar a magnitude mínima ou reduzir área/período.
-- **Área importada:** a parte do mapa que o painel não cobre.
-- **Reimportar** a mesma área atualiza os eventos (pelo id da USGS) em vez de duplicar.
-- **No mapa:** cor = profundidade (0–10, 10–35, 35–70, 70–300, > 300 km), tamanho = magnitude. Exibe até 5.000 eventos da área visível, priorizando os maiores.
-
-## 🪨 Falhas (Fase 2)
-
-- **GEM Global Active Faults** ([GEMScienceTools/gem-global-active-faults](https://github.com/GEMScienceTools/gem-global-active-faults), CC-BY-SA 4.0): ~13.700 falhas ativas no mundo. A base (10 MB) é baixada na primeira importação e guardada em `data/cache/` por 30 dias; importa só as falhas que cruzam a área visível.
-  - ⚠️ **Não cobre o Brasil** (nenhuma falha no território; na América do Sul só os Andes).
-- **Upload de arquivo** — para o Brasil e outras bases:
-  - GeoJSON (`.geojson`/`.json`) ou shapefile compactado (`.zip` com `.shp`, `.shx`, `.dbf` e, se houver, `.prj`/`.cpg`).
-  - Coordenadas **geográficas** (WGS84 / SIRGAS 2000). Arquivos em UTM são recusados com instrução para reprojetar no QGIS.
-  - Só linhas (LineString/MultiLineString); pontos e polígonos são ignorados e contados.
-  - Nome e tipo são lidos de colunas comuns (`name`/`nome`, `slip_type`/`tipo`...); os demais atributos ficam guardados.
-  - Fontes sugeridas para o Brasil: GeoSGB / SGB-CPRM (falhas e zonas de cisalhamento dos mapas geológicos).
-- **Categoria** pelo mecanismo principal: normal, reversa/empurrão, transcorrente, dorsal ou outra (termos em inglês e português).
-- Reenviar o mesmo traçado **atualiza** em vez de duplicar. Cada fonte pode ser apagada separadamente.
-
-## 📐 Análise de correlação (Fase 3)
-
-**Pergunta:** os epicentros estão mais perto das falhas do que estariam por acaso?
-
-1. **Projeção:** azimutal equidistante centrada na área (distâncias em km, pouca distorção em escala regional; aviso acima de 2.500 km).
-2. **Distância observada:** de cada epicentro à falha mais próxima (índice espacial STRtree). Falhas até o maior buffer *fora* da área também contam.
-3. **Hipótese nula:** epicentros uniformes na área de estudo (uniforme na esfera dentro da caixa).
-4. **Monte Carlo** (padrão 999 simulações, semente fixa → reprodutível): catálogos aleatórios do mesmo tamanho.
-   - *Mediana*: p = (1 + nº de simulações com mediana ≤ observada) / (n + 1).
-   - *Buffers* (padrão 5, 10, 20, 50 km): % observada × esperada, razão e p-valor, **corrigido por Bonferroni** (p × nº de buffers) — testar vários buffers de uma vez inflaria o falso positivo.
-   - *Afastamento*: cauda oposta da mediana; só se conclui "mais longe" com p < 0,05.
-5. **Conclusão** combina os dois testes, porque respondem perguntas diferentes:
-
-| Código | Situação |
-|---|---|
-| `associacao` | Mediana menor que o acaso **e** excesso de eventos junto às falhas |
-| `proximidade_sem_excesso` | Mais perto no geral, mas nenhum excesso colado às falhas (típico de falha inclinada/subducção ou estrutura não mapeada) |
-| `excesso_local` | Mediana igual ao acaso, mas excesso junto às falhas |
-| `sem_associacao` | Nada significativo |
-| `afastamento` | Epicentros mais longe que o acaso |
-
-6. **Complementos:** teste KS (diferença de *forma* entre as distribuições — informativo, não entra na conclusão), Spearman magnitude × distância, ranking das falhas (eventos, magnitude máxima, energia `log E = 1,5M + 4,8`, eventos por 100 km), histograma observado × esperado e, por epicentro, a distância e o ponto mais próximo na falha.
-
-**Parâmetros de `POST /api/analise`:** `bbox` (obrigatório), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
-
-> 💡 **Profundidade importa.** Falhas mapeadas são traços em superfície. Em zonas de subducção, sismos profundos ocorrem no plano inclinado, dezenas a centenas de km do traço. Use `prof_max_km` (ex.: 35) para analisar só a sismicidade crustal rasa.
-
-## 🖥️ Interface da análise (Fase 4)
-
-- **Aba Análise:** área de estudo = área visível do mapa; profundidade máxima (padrão ≤ 35 km), magnitude mínima, buffers, nº de simulações; em *Mais opções*: período, fontes de falhas e nome.
-- **Resultado:** cartão de conclusão (verde = associação, amarelo = parcial, cinza = sem associação), medianas e p-valor, tabela de buffers (clique mostra a zona no mapa), histograma observado × esperado (Chart.js), falhas com mais eventos (clique enquadra a falha) e outros testes (KS, Spearman).
-- **Mapa:** contorno da área de estudo, zona de buffer, e no popup de cada epicentro a distância e uma linha tracejada até o ponto mais próximo da falha.
-- **Camada "Densidade (calor)"** no seletor de camadas (Leaflet.heat, peso pela magnitude).
-- **Histórico:** clicar numa análise salva reabre o resultado e enquadra a área.
-- **Avisos:** poucos eventos, área grande e quando os epicentros ocupam só uma pequena parte da área de estudo (sinal de área maior que a importada, o que enviesa a hipótese nula).
-
-## 💾 Importações, histórico e exportação (Fase 5)
-
-- **Registro de importações:** cada importação (USGS, GEM ou arquivo) guarda a área consultada, os filtros e a quantidade recebida. A aba Dados lista as recentes; clicar mostra a área no mapa.
-- **Área de estudo = área importada (padrão):** a análise usa exatamente a caixa onde os sismos foram buscados. Assim os pontos aleatórios da hipótese nula só caem onde de fato houve coleta.
-- **Cobertura:** toda análise informa que % da área de estudo teve sismos importados (cálculo exato na esfera); abaixo de 95% aparece um aviso. Dados importados antes do registro usam uma estimativa.
-- **Exportar** (no resultado):
-  - **CSV** — uma linha por epicentro: id, data, coordenadas, magnitude, profundidade, distância, falha mais próxima e o ponto nela. Formato Excel pt-BR (`;`, vírgula decimal, UTF-8 com BOM).
-  - **GeoJSON** — epicentros, linhas até a falha e a área de estudo, para abrir no QGIS.
-  - **JSON** — o resultado completo.
-- **Histórico:** mostra a conclusão de cada análise; cada uma pode ser apagada individualmente.
-
-> Exemplo real (Coquimbo, sismos ≤ 35 km): com uma área 36% maior que a importada, o resultado era "mais perto, mas sem excesso"; com a área importada exata, passa a **associação significativa** (11,0% dos eventos a até 50 km de uma falha, contra 7,4% esperados; p ajustado = 0,016). A escolha da área muda a conclusão — por isso ela é registrada.
-
-## 🚀 Como executar
-
-### Ubuntu Server (VM)
-```bash
-chmod +x setup_vm.sh && ./setup_vm.sh
-./venv/bin/python3 app.py
-```
-
-### Windows (desenvolvimento)
-```bash
-python -m venv venv
-venv\Scripts\pip install -r requirements.txt
-venv\Scripts\python app.py
-```
-
-Acesse **http://localhost:5000** (ou `http://<IP-da-VM>:5000`).
-
-### Variáveis de ambiente (opcionais)
+## ⚙️ Configuração (variáveis de ambiente, opcionais)
 
 | Variável | Padrão | Uso |
 |---|---|---|
@@ -178,7 +178,27 @@ Acesse **http://localhost:5000** (ou `http://<IP-da-VM>:5000`).
 | `FLASK_DEBUG=1` | desligado | Modo debug |
 | `PORT` | `5000` | Porta HTTP |
 
-### Testes
+Para usar PostgreSQL na VM:
+```bash
+sudo apt-get install -y postgresql
+sudo -u postgres psql -c "CREATE DATABASE sismo_db;"
+sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+```
+
+## ✅ Testes
 ```bash
 python -m pytest -q
 ```
+75 testes: validação das entradas, leitura de GeoJSON/shapefile, distâncias geodésicas, calibração estatística, exportação, registro de importações, demonstração offline e API.
+
+## 🗺️ Roteiro
+
+| Fase | Entrega | |
+|---|---|---|
+| 0 | Esqueleto, banco, interface base | ✅ |
+| 1 | Epicentros da USGS no mapa | ✅ |
+| 2 | Falhas: GEM e upload GeoJSON/shapefile | ✅ |
+| 3 | Motor de correlação (distâncias, Monte Carlo, buffers, KS) | ✅ |
+| 4 | Interface da análise (conclusão, gráfico, zonas, calor) | ✅ |
+| 5 | Registro de importações, área importada, exportação | ✅ |
+| 6 | Funcionamento offline, demonstração, instalação e documentação | ✅ |

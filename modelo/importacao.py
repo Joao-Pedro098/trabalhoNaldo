@@ -23,12 +23,22 @@ class ImportacaoModelo:
     def registrar(tipo: str, fonte: str, bbox: Dict, parametros: Optional[Dict], recebidos: int) -> None:
         conn = get_db_connection()
         cursor = conn.cursor()
-        valores = (tipo, fonte, bbox["sul"], bbox["oeste"], bbox["norte"], bbox["leste"],
-                   json.dumps(parametros or {}), recebidos)
-        marcadores = ", ".join(ph() for _ in valores)
-        cursor.execute(
-            f"INSERT INTO importacoes (tipo, fonte, sul, oeste, norte, leste, parametros_json, recebidos) "
-            f"VALUES ({marcadores})", valores)
+        chave = (tipo, fonte, bbox["sul"], bbox["oeste"], bbox["norte"], bbox["leste"],
+                 json.dumps(parametros or {}, sort_keys=True))
+        # A mesma importação repetida (mesma área e filtros) só atualiza o registro existente
+        condicao = " AND ".join(f"{c} = {ph()}" for c in
+                                ("tipo", "fonte", "sul", "oeste", "norte", "leste", "parametros_json"))
+        cursor.execute(f"SELECT id FROM importacoes WHERE {condicao}", chave)
+        existente = cursor.fetchone()
+        if existente:
+            id_existente = existente["id"] if hasattr(existente, "keys") else existente[0]
+            cursor.execute(f"UPDATE importacoes SET recebidos = {ph()}, criado_em = CURRENT_TIMESTAMP "
+                           f"WHERE id = {ph()}", (recebidos, id_existente))
+        else:
+            marcadores = ", ".join(ph() for _ in range(len(chave) + 1))
+            cursor.execute(
+                f"INSERT INTO importacoes (tipo, fonte, sul, oeste, norte, leste, parametros_json, recebidos) "
+                f"VALUES ({marcadores})", chave + (recebidos,))
         conn.commit()
         conn.close()
 
