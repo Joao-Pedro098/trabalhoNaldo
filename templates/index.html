@@ -87,11 +87,42 @@
                     </div>
                 </div>
                 <p class="db-info"><i class="fa-solid fa-database"></i> Banco em uso: <strong id="db-backend">–</strong></p>
+                <p class="db-info hidden" id="epi-resumo"></p>
 
-                <div class="empty-state-box" id="dados-vazio">
-                    <i class="fa-solid fa-cloud-arrow-down"></i>
-                    <p>Nenhum dado importado ainda.</p>
-                    <small>A importação de epicentros (USGS) e de falhas (GEM / GeoJSON) entra nas próximas fases.</small>
+                <!-- Importação USGS -->
+                <h2 class="section-title">Importar epicentros (USGS)</h2>
+                <form class="form-card" id="form-importar">
+                    <div class="form-area">
+                        <i class="fa-regular fa-square"></i>
+                        <div>
+                            <strong>Área visível do mapa</strong>
+                            <small id="bbox-texto">--</small>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>Início<input type="date" id="imp-inicio" required></label>
+                        <label>Fim<input type="date" id="imp-fim" required></label>
+                    </div>
+                    <div class="form-row">
+                        <label>Magnitude mínima<input type="number" id="imp-mag" min="-2" max="10" step="0.1" value="2.5" required></label>
+                    </div>
+                    <button type="submit" class="btn-primary" id="btn-importar">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> Importar da USGS
+                    </button>
+                    <small class="form-hint">Até 20.000 eventos por importação. Dados repetidos são atualizados, não duplicados.</small>
+                </form>
+
+                <!-- Exibição -->
+                <h2 class="section-title">Exibição no mapa</h2>
+                <div class="form-card">
+                    <label class="range-label">
+                        <span>Magnitude mínima exibida: <strong id="filtro-mag-valor">0.0</strong></span>
+                        <input type="range" id="filtro-mag" min="0" max="8" step="0.5" value="0">
+                    </label>
+                    <small class="form-hint" id="exibindo-texto">Nenhum epicentro na área visível.</small>
+                    <button type="button" class="btn-link-danger hidden" id="btn-apagar-epicentros">
+                        <i class="fa-regular fa-trash-can"></i> Apagar todos os epicentros
+                    </button>
                 </div>
             </section>
 

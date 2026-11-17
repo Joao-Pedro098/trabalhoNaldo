@@ -1,29 +1,3 @@
-import os
-import sys
-
-import pytest
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-
-@pytest.fixture()
-def cliente(tmp_path, monkeypatch):
-    monkeypatch.setenv("DB_BACKEND", "sqlite")
-    monkeypatch.setenv("SQLITE_PATH", str(tmp_path / "teste.db"))
-
-    import importlib
-    import db.database as database
-    importlib.reload(database)
-    import modelo.sistema
-    import controle.sistema_controle
-    import rotas.rotas
-    import app as app_mod
-    for m in (modelo.sistema, controle.sistema_controle, rotas.rotas, app_mod):
-        importlib.reload(m)
-
-    return app_mod.criar_app().test_client()
-
-
 def test_pagina_principal(cliente):
     resp = cliente.get("/")
     assert resp.status_code == 200

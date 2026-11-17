@@ -12,11 +12,14 @@ Feito sobre a mesma stack e o mesmo padrão MVC do PyMaps (trabalhoNaldo): Flask
 sismoFalhas/
 ├── controle/                  # CONTROLLER
 │   ├── sistema_controle.py    # Página, busca de região, localização, status, análises
+│   ├── epicentros_controle.py # Importação/consulta de epicentros (com validação)
 │   └── respostas.py           # Respostas JSON padronizadas {sucesso, ...}
 ├── db/
 │   └── database.py            # PostgreSQL ou SQLite; tabelas epicentros, falhas, analises
 ├── modelo/                    # MODEL
 │   ├── geocodificacao.py      # Nominatim (busca/reverso) e localização por IP
+│   ├── epicentro.py           # Persistência e consultas de epicentros
+│   ├── fontes/usgs.py         # Cliente do catálogo FDSN da USGS
 │   └── sistema.py             # Contagens e análises salvas
 ├── rotas/
 │   └── rotas.py               # Endpoints HTTP (Blueprint)
@@ -28,7 +31,7 @@ sismoFalhas/
 └── requirements.txt
 ```
 
-## 🔌 Endpoints (Fase 0)
+## 🔌 Endpoints
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -37,6 +40,10 @@ sismoFalhas/
 | GET | `/api/reverso?lat=&lon=` | Nome do lugar nas coordenadas |
 | GET | `/api/minha-localizacao` | Localização aproximada por IP |
 | GET | `/api/status` | Banco em uso e contagem de registros |
+| POST | `/api/epicentros/importar` | Importa da USGS. Corpo: `{bbox:{sul,oeste,norte,leste}, inicio, fim, min_mag}` |
+| GET | `/api/epicentros?sul=&oeste=&norte=&leste=&min_mag=&inicio=&fim=&limite=` | Epicentros filtrados (maiores magnitudes primeiro) + total |
+| GET | `/api/epicentros/resumo` | Total, faixa de magnitude e período no banco |
+| DELETE | `/api/epicentros` | Apaga todos os epicentros |
 | GET / DELETE | `/api/analises` | Lista / apaga análises salvas |
 
 ## 🗺️ Roteiro
@@ -44,7 +51,7 @@ sismoFalhas/
 | Fase | Entrega | Situação |
 |---|---|---|
 | 0 | Esqueleto, banco, interface base | ✅ |
-| 1 | Importação de epicentros (USGS) e camada no mapa | ⏳ |
+| 1 | Importação de epicentros (USGS) e camada no mapa | ✅ |
 | 2 | Importação de falhas (GEM / upload GeoJSON) | ⏳ |
 | 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ⏳ |
 | 4 | Interface de análise (área, gráficos, mapa de calor) | ⏳ |
@@ -52,6 +59,13 @@ sismoFalhas/
 | 6 | Acabamento, dados de demonstração offline | ⏳ |
 
 ---
+
+## 🌎 Epicentros (Fase 1)
+
+- **Fonte:** [USGS FDSN Event API](https://earthquake.usgs.gov/fdsnws/event/1/), sem chave. Até 20.000 eventos por importação; acima disso o sistema pede para aumentar a magnitude mínima ou reduzir área/período.
+- **Área importada:** a parte do mapa que o painel não cobre.
+- **Reimportar** a mesma área atualiza os eventos (pelo id da USGS) em vez de duplicar.
+- **No mapa:** cor = profundidade (0–10, 10–35, 35–70, 70–300, > 300 km), tamanho = magnitude. Exibe até 5.000 eventos da área visível, priorizando os maiores.
 
 ## 🚀 Como executar
 

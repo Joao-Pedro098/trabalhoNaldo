@@ -1,5 +1,6 @@
 from flask import Blueprint
 
+from controle.epicentros_controle import EpicentrosControle
 from controle.sistema_controle import SistemaControle
 
 rotas_bp = Blueprint("rotas", __name__)
@@ -30,6 +31,27 @@ def minha_localizacao():
 @rotas_bp.route("/api/status", methods=["GET"])
 def status():
     return SistemaControle.status()
+
+
+# ---- Epicentros ----
+@rotas_bp.route("/api/epicentros/importar", methods=["POST"])
+def importar_epicentros():
+    return EpicentrosControle.importar_usgs()
+
+
+@rotas_bp.route("/api/epicentros", methods=["GET"])
+def listar_epicentros():
+    return EpicentrosControle.listar()
+
+
+@rotas_bp.route("/api/epicentros/resumo", methods=["GET"])
+def resumo_epicentros():
+    return EpicentrosControle.resumo()
+
+
+@rotas_bp.route("/api/epicentros", methods=["DELETE"])
+def apagar_epicentros():
+    return EpicentrosControle.apagar()
 
 
 # ---- Análises salvas (preenchidas a partir da Fase 5) ----
