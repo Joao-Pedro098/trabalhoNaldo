@@ -241,13 +241,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const popupEpicentro = (e) => {
         const link = e.fonte === 'USGS'
-            ? `<a href="https://earthquake.usgs.gov/earthquakes/eventpage/${encodeURIComponent(e.id_externo)}" target="_blank" rel="noopener">Ver na USGS</a>` : '';
+            ? `<a href="https://earthquake.usgs.gov/earthquakes/eventpage/${encodeURIComponent(e.id_externo)}" target="_blank" rel="noopener">Ver na USGS</a>`
+            : escapeHtml(e.fonte === 'USP' ? 'Centro de Sismologia USP' : e.fonte);
         return `<div class="popup-epi">
             <div class="popup-mag" style="background:${corProfundidade(e.profundidade_km)}">M ${e.magnitude?.toFixed(1) ?? '?'}</div>
             <div>
                 <strong>${escapeHtml(e.local || 'Local não informado')}</strong>
                 <span>${escapeHtml(e.data_hora)} UTC</span>
-                <span>Profundidade: ${e.profundidade_km != null ? e.profundidade_km.toFixed(1) + ' km' : '?'} · ${escapeHtml(e.tipo_magnitude || '')}</span>
+                <span>Profundidade: ${e.profundidade_km != null ? e.profundidade_km.toFixed(1) + ' km' : 'não determinada'} · ${escapeHtml(e.tipo_magnitude || '')}</span>
                 <span>${e.lat.toFixed(4)}, ${e.lon.toFixed(4)} · ${link}</span>
                 ${ganchos.popupEpicentro?.(e) || ''}
             </div></div>`;
@@ -260,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!bboxValido(b)) return; // mapa ainda sem tamanho (página carregando)
         const minMag = $('filtro-mag').value;
         const qs = new URLSearchParams({ ...b, min_mag: minMag, limite: LIMITE_EXIBICAO });
+        if ($('filtro-brasil').checked) qs.set('territorio', 'BR');
         try {
             const data = await api(`/api/epicentros?${qs}`);
             if (id !== requisicaoAtual) return; // resposta antiga: o mapa já mudou
@@ -297,6 +299,8 @@ document.addEventListener('DOMContentLoaded', () => {
         debounceMapa = setTimeout(() => { carregarEpicentros(); carregarFalhas(); }, 300);
     });
 
+    $('filtro-brasil').addEventListener('change', () => carregarEpicentros());
+
     $('filtro-mag').addEventListener('input', (e) => {
         $('filtro-mag-valor').textContent = Number(e.target.value).toFixed(1);
         clearTimeout(debounceMapa);
@@ -320,13 +324,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         botao.disabled = true;
-        botao.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Consultando a USGS...';
+        const fonte = $('imp-fonte').value;
+        botao.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Consultando ${fonte === 'usp' ? 'a USP (pode levar 1 min)' : 'a USGS'}...`;
         try {
             const data = await api('/api/epicentros/importar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     bbox,
+                    fonte,
                     inicio: $('imp-inicio').value,
                     fim: $('imp-fim').value,
                     min_mag: $('imp-mag').value
@@ -387,7 +393,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const b = bboxVisivel();
         if (!bboxValido(b)) return;
         try {
-            const data = await api(`/api/falhas?${new URLSearchParams({ ...b, limite: LIMITE_EXIBICAO })}`);
+            // Em escala pequena simplifica os traçados (~1 pixel): milhares de falhas ficam leves
+            const grausPorPixel = (b.leste - b.oeste) / Math.max(map.getSize().x, 1);
+            const params = { ...b, limite: LIMITE_EXIBICAO };
+            if (map.getZoom() < 10) params.tolerancia = grausPorPixel.toFixed(5);
+            const data = await api(`/api/falhas?${new URLSearchParams(params)}`);
             if (id !== requisicaoFalhas) return;
             const camada = camadasDados['Falhas'];
             camada.clearLayers();
@@ -512,6 +522,31 @@ document.addEventListener('DOMContentLoaded', () => {
             map.flyToBounds([[b.sul, b.oeste], [b.norte, b.leste]],
                 { paddingTopLeft: [esquerda + 30, topo + 30], paddingBottomRight: [30, 30] });
             await carregarStatus();
+        });
+    });
+
+    const DICAS_FONTE = {
+        usgs: ['Importar da USGS', 'Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.'],
+        usp: ['Importar da USP', 'Rede Sismográfica Brasileira: sismos do Brasil desde 1724. Muitos têm profundidade não determinada.']
+    };
+    $('imp-fonte').addEventListener('change', (e) => {
+        const [texto, dica] = DICAS_FONTE[e.target.value];
+        $('btn-importar-texto').textContent = texto;
+        $('imp-fonte-dica').textContent = dica;
+        if (e.target.value === 'usp' && Number($('imp-mag').value) > 2) $('imp-mag').value = 2;
+    });
+
+    $('btn-importar-sgb').addEventListener('click', () => {
+        const bbox = bboxVisivel();
+        if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }
+        comCarregamento($('btn-importar-sgb'), 'Buscando no SGB...', async () => {
+            const data = await api('/api/falhas/importar-sgb', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bbox, incluir_lineamentos: $('sgb-lineamentos').checked })
+            });
+            showAlert(data.mensagem, data.recebidos ? 'info' : 'error');
+            await Promise.all([carregarStatus(), carregarFalhas()]);
         });
     });
 

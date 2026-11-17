@@ -5,7 +5,7 @@ from flask import request
 from controle.epicentros_controle import ErroValidacao, ler_bbox
 from controle.respostas import resposta_erro, resposta_sucesso
 from modelo.falha import FalhaModelo
-from modelo.fontes import arquivo_falhas, gem
+from modelo.fontes import arquivo_falhas, gem, sgb
 from modelo.fontes.geometria import ErroArquivo
 from modelo.fontes.usgs import ErroFonte
 from modelo.importacao import ImportacaoModelo
@@ -45,6 +45,30 @@ class FalhasControle:
         return resposta_sucesso(resultado, mensagem=msg)
 
     @staticmethod
+    def importar_sgb():
+        dados = request.get_json(silent=True) or {}
+        try:
+            bbox = ler_bbox(dados.get("bbox") or {})
+        except ErroValidacao as e:
+            return resposta_erro(str(e))
+        incluir_lineamentos = dados.get("incluir_lineamentos") is True
+        try:
+            registros = sgb.buscar(bbox, incluir_lineamentos)
+        except ErroFonte as e:
+            return resposta_erro(str(e), status=502)
+
+        ImportacaoModelo.registrar("falhas", sgb.FONTE, bbox, {"incluir_lineamentos": incluir_lineamentos},
+                                   len(registros))
+        if not registros:
+            return resposta_sucesso({"novos": 0, "atualizados": 0, "recebidos": 0},
+                                    mensagem="O SGB não tem estruturas mapeadas nesta área (cobre só o Brasil).")
+        resultado = FalhaModelo.salvar_lote(registros)
+        resultado["recebidos"] = len(registros)
+        msg = (f"{len(registros)} estruturas do SGB na área: "
+               f"{resultado['novos']} novas, {resultado['atualizados']} já existiam.")
+        return resposta_sucesso(resultado, mensagem=msg)
+
+    @staticmethod
     def enviar_arquivo():
         arquivo = request.files.get("arquivo")
         if arquivo is None or not arquivo.filename:
@@ -52,8 +76,8 @@ class FalhasControle:
 
         nome_base = os.path.splitext(os.path.basename(arquivo.filename))[0]
         fonte = (request.form.get("fonte") or nome_base).strip()[:TAMANHO_MAX_FONTE]
-        if fonte == gem.FONTE:
-            return resposta_erro(f"O nome de fonte '{gem.FONTE}' é reservado para a base do GEM.")
+        if fonte in (gem.FONTE, sgb.FONTE):
+            return resposta_erro(f"O nome de fonte '{fonte}' é reservado para a importação automática.")
 
         try:
             registros, ignoradas = arquivo_falhas.ler(arquivo.filename, arquivo.read(), fonte)
@@ -77,11 +101,12 @@ class FalhasControle:
         try:
             bbox = ler_bbox(args) if args.get("sul") is not None else None
             limite = min(max(int(args.get("limite", 5000)), 1), 20000)
+            tolerancia = min(max(float(args.get("tolerancia") or 0), 0.0), 0.5) or None
         except ErroValidacao as e:
             return resposta_erro(str(e))
         except ValueError:
-            return resposta_erro("Parâmetro 'limite' deve ser inteiro.")
-        return resposta_sucesso(FalhaModelo.listar(bbox, limite))
+            return resposta_erro("Parâmetros 'limite' (inteiro) e 'tolerancia' (graus) inválidos.")
+        return resposta_sucesso(FalhaModelo.listar(bbox, limite, tolerancia))
 
     @staticmethod
     def fontes():

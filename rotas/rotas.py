@@ -68,6 +68,11 @@ def importar_falhas_gem():
     return FalhasControle.importar_gem()
 
 
+@rotas_bp.route("/api/falhas/importar-sgb", methods=["POST"])
+def importar_falhas_sgb():
+    return FalhasControle.importar_sgb()
+
+
 @rotas_bp.route("/api/falhas/upload", methods=["POST"])
 def enviar_falhas():
     return FalhasControle.enviar_arquivo()
@@ -107,6 +112,16 @@ def apagar_analise(analise_id):
 @rotas_bp.route("/api/analises/<int:analise_id>/exportar", methods=["GET"])
 def exportar_analise(analise_id):
     return AnaliseControle.exportar(analise_id)
+
+
+@rotas_bp.route("/api/territorios", methods=["GET"])
+def listar_territorios():
+    return AnaliseControle.territorios()
+
+
+@rotas_bp.route("/api/territorios/<codigo>", methods=["GET"])
+def contorno_territorio(codigo):
+    return AnaliseControle.contorno_territorio(codigo)
 
 
 @rotas_bp.route("/api/importacoes", methods=["GET"])

@@ -97,9 +97,18 @@
                     <button type="button" class="btn-secondary" id="btn-demo">Carregar</button>
                 </div>
 
-                <!-- Importação USGS -->
-                <h2 class="section-title">Importar epicentros (USGS)</h2>
+                <!-- Importação de epicentros -->
+                <h2 class="section-title">Importar epicentros</h2>
                 <form class="form-card" id="form-importar">
+                    <div class="form-row">
+                        <label>Catálogo
+                            <select id="imp-fonte">
+                                <option value="usgs">USGS (mundial)</option>
+                                <option value="usp">Centro de Sismologia da USP (Brasil)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <small class="form-hint" id="imp-fonte-dica">Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.</small>
                     <div class="form-area">
                         <i class="fa-regular fa-square"></i>
                         <div>
@@ -115,7 +124,7 @@
                         <label>Magnitude mínima<input type="number" id="imp-mag" min="-2" max="10" step="0.1" value="2.5" required></label>
                     </div>
                     <button type="submit" class="btn-primary" id="btn-importar">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> Importar da USGS
+                        <i class="fa-solid fa-cloud-arrow-down"></i> <span id="btn-importar-texto">Importar da USGS</span>
                     </button>
                     <small class="form-hint">Até 20.000 eventos por importação. Dados repetidos são atualizados, não duplicados.</small>
                 </form>
@@ -128,6 +137,15 @@
                         <small>Base mundial de falhas ativas (Andes, Califórnia, Himalaia...). <b>Não cobre o Brasil.</b> Usa a mesma área visível acima.</small>
                         <button type="button" class="btn-secondary" id="btn-importar-gem">
                             <i class="fa-solid fa-cloud-arrow-down"></i> Importar falhas do GEM
+                        </button>
+                    </div>
+                    <hr class="form-sep">
+                    <div class="fonte-opcao">
+                        <strong><i class="fa-solid fa-map-location-dot"></i> SGB — Estruturas do Brasil (1:1.000.000)</strong>
+                        <small>Falhas e zonas de cisalhamento de todo o território (Serviço Geológico do Brasil). Em sua maioria <b>estruturas antigas</b>, não falhas ativas. Usa a área visível; o primeiro download leva ~20 s.</small>
+                        <label class="check-linha"><input type="checkbox" id="sgb-lineamentos"> Incluir lineamentos de foliação (não são falhas)</label>
+                        <button type="button" class="btn-secondary" id="btn-importar-sgb">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> Importar estruturas do SGB
                         </button>
                     </div>
                     <hr class="form-sep">
@@ -154,6 +172,7 @@
                         <span>Magnitude mínima exibida: <strong id="filtro-mag-valor">0.0</strong></span>
                         <input type="range" id="filtro-mag" min="0" max="8" step="0.5" value="0">
                     </label>
+                    <label class="check-linha"><input type="checkbox" id="filtro-brasil"> Mostrar só os sismos dentro do Brasil</label>
                     <small class="form-hint" id="exibindo-texto">Nenhum epicentro na área visível.</small>
                     <small class="form-hint" id="exibindo-falhas-texto"></small>
                     <button type="button" class="btn-link-danger hidden" id="btn-apagar-epicentros">
@@ -183,6 +202,12 @@
                         <label class="area-opcao">
                             <input type="radio" name="an-area" value="importada" checked>
                             <span><strong>Área importada</strong><small>Exatamente onde os sismos foram buscados (recomendado)</small></span>
+                        </label>
+                        <label class="area-opcao">
+                            <input type="radio" name="an-area" value="territorio">
+                            <span><strong>Território</strong><small>Brasil ou um estado (contorno do IBGE): o acaso só sorteia pontos dentro dele</small>
+                                <select id="an-territorio" aria-label="Território"><option value="BR">Brasil (território inteiro)</option></select>
+                            </span>
                         </label>
                         <label class="area-opcao">
                             <input type="radio" name="an-area" value="visivel">
@@ -220,6 +245,7 @@
                         <div class="form-row">
                             <label>Nome da análise<input type="text" id="an-nome" maxlength="120" placeholder="Gerado automaticamente"></label>
                         </div>
+                        <label class="check-linha"><input type="checkbox" id="an-sem-prof" checked> Tratar sismos sem profundidade como rasos (comum no Brasil)</label>
                         <fieldset class="fontes-check" id="an-fontes">
                             <legend>Fontes de falhas</legend>
                             <small class="form-hint">Nenhuma falha importada.</small>

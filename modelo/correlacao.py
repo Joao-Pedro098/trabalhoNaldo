@@ -55,12 +55,50 @@ def area_bbox_km2(bbox: Dict) -> float:
     return RAIO_TERRA_KM ** 2 * dlon * (math.sin(math.radians(bbox["norte"])) - math.sin(math.radians(bbox["sul"])))
 
 
-def pontos_aleatorios(bbox: Dict, n: int, rng: np.random.Generator):
-    """n pontos uniformes na esfera dentro da caixa (lon, lat em graus)."""
-    lon = rng.uniform(bbox["oeste"], bbox["leste"], n)
+def pontos_aleatorios(bbox: Dict, n: int, rng: np.random.Generator, poligono=None):
+    """n pontos uniformes na esfera dentro da caixa (lon, lat em graus).
+
+    Com `poligono` (lon/lat), sorteia na caixa e descarta os pontos fora dele
+    (amostragem por rejeição: continua uniforme, agora só dentro do território).
+    """
     s1, s2 = math.sin(math.radians(bbox["sul"])), math.sin(math.radians(bbox["norte"]))
-    lat = np.degrees(np.arcsin(rng.uniform(s1, s2, n)))
-    return lon, lat
+    if poligono is None:
+        lon = rng.uniform(bbox["oeste"], bbox["leste"], n)
+        lat = np.degrees(np.arcsin(rng.uniform(s1, s2, n)))
+        return lon, lat
+    lons, lats, total = [], [], 0
+    while total < n:
+        lote = max(1000, 2 * (n - total))
+        lon = rng.uniform(bbox["oeste"], bbox["leste"], lote)
+        lat = np.degrees(np.arcsin(rng.uniform(s1, s2, lote)))
+        dentro = shapely.contains_xy(poligono, lon, lat)
+        lons.append(lon[dentro]); lats.append(lat[dentro]); total += int(dentro.sum())
+    return np.concatenate(lons)[:n], np.concatenate(lats)[:n]
+
+
+def area_poligono_km2(poligono) -> float:
+    """Área geodésica (elipsoide WGS84) de um polígono lon/lat."""
+    from pyproj import Geod
+    area, _ = Geod(ellps="WGS84").geometry_area_perimeter(poligono)
+    return abs(area) / 1e6
+
+
+def erro_escala_pct(bbox: Dict) -> float:
+    """Maior exagero de distância (%) da projeção azimutal equidistante dentro da caixa.
+
+    Nessa projeção a escala é exata na direção do centro e vale c/sen(c) na perpendicular,
+    onde c é a distância angular ao centro: o pior caso é o canto mais distante.
+    """
+    lat0 = math.radians((bbox["sul"] + bbox["norte"]) / 2)
+    lon0 = math.radians((bbox["oeste"] + bbox["leste"]) / 2)
+    pior = 0.0
+    for la in (bbox["sul"], bbox["norte"]):
+        for lo in (bbox["oeste"], bbox["leste"]):
+            la_r, lo_r = math.radians(la), math.radians(lo)
+            c = math.acos(max(-1.0, min(1.0, math.sin(lat0) * math.sin(la_r)
+                                          + math.cos(lat0) * math.cos(la_r) * math.cos(lo_r - lon0))))
+            pior = max(pior, (c / math.sin(c) - 1) if c > 1e-9 else 0.0)
+    return 100 * pior
 
 
 def energia_joules(magnitude: Optional[float]) -> float:
@@ -120,7 +158,8 @@ class IndiceFalhas:
 
 def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
              buffers_km: Sequence[float] = (5, 10, 20, 50), n_simulacoes: int = 999,
-             semente: int = 42, cobertura_importada: Optional[float] = None) -> Dict:
+             semente: int = 42, cobertura_importada: Optional[float] = None,
+             poligono=None) -> Dict:
     """Roda a análise completa.
 
     epicentros: [{id, lat, lon, magnitude, profundidade_km}, ...] (dentro da área)
@@ -128,6 +167,8 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     bbox:       {sul, oeste, norte, leste} — área de estudo (hipótese nula)
     cobertura_importada: fração da área com sismos importados (registro de importações);
                          None quando desconhecida -> usa uma estimativa pela extensão dos eventos.
+    poligono:   território de estudo (shapely, lon/lat). Quando dado, a hipótese nula sorteia
+                pontos só dentro dele e `bbox` deve ser a caixa que o envolve.
     """
     if len(epicentros) < 10:
         raise ErroAnalise(f"São necessários pelo menos 10 epicentros na área (há {len(epicentros)}).")
@@ -153,7 +194,7 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
 
     # ---- hipótese nula: pool de distâncias de pontos aleatórios na área
     tamanho_pool = int(min(max(n_simulacoes * n, 20_000), TAMANHO_POOL_ALEATORIO))
-    rlon, rlat = pontos_aleatorios(bbox, tamanho_pool, rng)
+    rlon, rlat = pontos_aleatorios(bbox, tamanho_pool, rng, poligono)
     rx, ry = projetor.transform(rlon, rlat)
     dist_pool, _, _ = indice.mais_proxima(np.asarray(rx), np.asarray(ry))
 
@@ -253,12 +294,16 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     ]
 
     # ---- área, avisos e interpretação
+    area_estudo_km2 = area_poligono_km2(poligono) if poligono is not None else area_bbox_km2(bbox)
     cx, cy = projetor.transform([bbox["oeste"], bbox["leste"], bbox["oeste"]],
                                 [bbox["sul"], bbox["sul"], bbox["norte"]])
     extensao_km = max(abs(cx[1] - cx[0]), abs(cy[2] - cy[0])) / 1000
     avisos = []
+    erro_pct = erro_escala_pct(bbox)
     if extensao_km > EXTENSAO_MAX_RECOMENDADA_KM:
-        avisos.append(f"Área grande ({extensao_km:,.0f} km): a projeção local distorce as distâncias nas bordas.".replace(",", "."))
+        extensao_txt = f"{extensao_km:,.0f}".replace(",", ".")
+        avisos.append(f"Área grande ({extensao_txt} km): perto das bordas as distâncias ficam até "
+                      f"{_br(erro_pct)}% maiores (projeção centrada na área).")
     if n < 30:
         avisos.append(f"Poucos epicentros ({n}): o teste tem pouco poder estatístico.")
     # Se parte da área não teve sismos importados, os pontos aleatórios caem onde não há
@@ -272,7 +317,7 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     else:
         # Sem registro de importação: estima pela extensão ocupada pelos próprios eventos
         cobertura = area_bbox_km2({"sul": float(lat.min()), "norte": float(lat.max()),
-                                   "oeste": float(lon.min()), "leste": float(lon.max())}) / area_bbox_km2(bbox)
+                                   "oeste": float(lon.min()), "leste": float(lon.max())}) / area_estudo_km2
         if cobertura < 0.25:
             avisos.append(
                 f"Os epicentros ocupam só {round(100 * cobertura)}% da área de estudo. Se a área for maior que a "
@@ -284,8 +329,9 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     resultado = {
         "n_epicentros": n,
         "n_falhas": len(falhas),
-        "area_km2": round(area_bbox_km2(bbox), 1),
+        "area_km2": round(area_estudo_km2, 1),
         "extensao_km": round(extensao_km, 1),
+        "erro_escala_max_pct": round(erro_pct, 2),
         "parametros": {"buffers_km": buffers_km, "n_simulacoes": n_simulacoes, "semente": semente,
                        "tamanho_pool": tamanho_pool},
         "projecao": proj_local(bbox),
@@ -313,7 +359,7 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     return resultado
 
 
-def zona_buffer(falhas: Sequence[Dict], bbox: Dict, km: float) -> Optional[Dict]:
+def zona_buffer(falhas: Sequence[Dict], bbox: Dict, km: float, poligono=None) -> Optional[Dict]:
     """Área a até `km` das falhas, recortada à área de estudo, como geometria GeoJSON.
 
     Calculada na mesma projeção da análise, para coincidir com os buffers dela.
@@ -332,8 +378,13 @@ def zona_buffer(falhas: Sequence[Dict], bbox: Dict, km: float) -> Optional[Dict]
                            np.full(50, bbox["norte"]), np.linspace(bbox["norte"], bbox["sul"], 50)])
     cx, cy = projetor.transform(lons, lats)
     area = shapely.polygons(np.column_stack([cx, cy]))
+    if poligono is not None:  # recorta ao território (ex.: Brasil ou uma UF)
+        area = shapely.transform(poligono, lambda c: np.column_stack(projetor.transform(c[:, 0], c[:, 1])))
     zona = shapely.intersection(zona, area)
-    zona = shapely.simplify(zona, tolerance=max(50.0, km * 20))  # metros; reduz o tamanho
+    # Tolerância (m) proporcional ao buffer e ao tamanho da área: num mapa do Brasil inteiro
+    # detalhes de centenas de metros não aparecem e só pesariam no navegador.
+    minx, miny, maxx, maxy = area.bounds
+    zona = shapely.simplify(zona, tolerance=max(50.0, km * 20, max(maxx - minx, maxy - miny) / 4000))
     if zona.is_empty:
         return None
 

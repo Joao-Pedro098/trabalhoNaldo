@@ -4,7 +4,10 @@ from flask import request
 
 from controle.respostas import resposta_erro, resposta_sucesso
 from modelo.epicentro import EpicentroModelo
-from modelo.fontes import usgs
+import shapely
+
+from modelo import territorio as territorios
+from modelo.fontes import usgs, usp
 from modelo.importacao import ImportacaoModelo
 
 
@@ -54,12 +57,18 @@ class EpicentrosControle:
             inicio = ler_data(dados.get("inicio"), "início")
             fim = ler_data(dados.get("fim"), "fim")
             min_mag = ler_magnitude(dados.get("min_mag"), padrao=2.5)
+            fonte = (dados.get("fonte") or "usgs").lower()
+            if fonte not in ("usgs", "usp"):
+                raise ErroValidacao("Fonte inválida: use 'usgs' ou 'usp'.")
         except ErroValidacao as e:
             return resposta_erro(str(e))
         if inicio > fim:
             return resposta_erro("A data de início é posterior à data de fim.")
         if fim > date.today().isoformat():
             fim = date.today().isoformat()
+
+        if fonte == "usp":
+            return EpicentrosControle._importar_usp(bbox, inicio, fim, min_mag)
 
         total = usgs.contar(bbox, inicio, fim, min_mag)
         if total is not None and total > usgs.LIMITE_USGS:
@@ -84,6 +93,20 @@ class EpicentrosControle:
         return resposta_sucesso(resultado, mensagem=msg)
 
     @staticmethod
+    def _importar_usp(bbox, inicio, fim, min_mag):
+        try:
+            registros = usp.buscar(bbox, inicio, fim, min_mag)
+        except usgs.ErroFonte as e:
+            return resposta_erro(str(e), status=502)
+        resultado = EpicentroModelo.salvar_lote(registros)
+        ImportacaoModelo.registrar("epicentros", usp.FONTE, bbox,
+                                   {"inicio": inicio, "fim": fim, "min_mag": min_mag}, len(registros))
+        resultado["recebidos"] = len(registros)
+        msg = (f"{len(registros)} eventos recebidos do Centro de Sismologia da USP: "
+               f"{resultado['novos']} novos, {resultado['atualizados']} já existiam.")
+        return resposta_sucesso(resultado, mensagem=msg)
+
+    @staticmethod
     def listar():
         args = request.args
         try:
@@ -92,11 +115,25 @@ class EpicentrosControle:
             inicio = ler_data(args["inicio"], "início") if args.get("inicio") else None
             fim = ler_data(args["fim"], "fim") if args.get("fim") else None
             limite = min(max(int(args.get("limite", 5000)), 1), 20000)
+            codigo = (args.get("territorio") or "").strip().upper() or None
+            poligono = None
+            if codigo:
+                try:
+                    poligono = territorios.poligono(codigo)
+                except ValueError as e:
+                    raise ErroValidacao(str(e))
         except ErroValidacao as e:
             return resposta_erro(str(e))
         except ValueError:
             return resposta_erro("Parâmetro 'limite' deve ser inteiro.")
-        return resposta_sucesso(EpicentroModelo.listar(bbox, min_mag, inicio, fim, limite))
+        if poligono is None:
+            return resposta_sucesso(EpicentroModelo.listar(bbox, min_mag, inicio, fim, limite))
+        # Só os eventos dentro do território (ex.: esconder os grandes sismos andinos)
+        dados = EpicentroModelo.listar(bbox, min_mag, inicio, fim, limite=200_000)
+        eps = dados["epicentros"]
+        dentro = shapely.contains_xy(poligono, [e["lon"] for e in eps], [e["lat"] for e in eps]) if eps else []
+        eps = [e for e, d in zip(eps, dentro) if d]
+        return resposta_sucesso({"total": len(eps), "epicentros": eps[:limite]})
 
     @staticmethod
     def resumo():

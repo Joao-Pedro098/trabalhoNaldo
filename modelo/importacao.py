@@ -3,6 +3,7 @@ import json
 import math
 from typing import Dict, List, Optional
 
+import numpy as np
 import shapely
 
 from db.database import get_db_connection, ph
@@ -59,16 +60,21 @@ class ImportacaoModelo:
         return linhas
 
     @staticmethod
-    def cobertura(tipo: str, bbox: Dict) -> Optional[float]:
-        """Fração (0–1) da área `bbox` coberta pelas importações do `tipo`.
+    def cobertura(tipo: str, bbox: Dict, poligono=None) -> Optional[float]:
+        """Fração (0–1) da área de estudo coberta pelas importações do `tipo`.
 
-        None quando não há nenhuma importação registrada (dados antigos, de antes do registro).
+        A área de estudo é `bbox` ou, se dado, o `poligono` (lon/lat). None quando não há
+        nenhuma importação registrada (dados antigos, de antes do registro).
         """
         importacoes = ImportacaoModelo.listar(tipo, limite=10_000)
         if not importacoes:
             return None
         uniao = shapely.union_all([_caixa_area_igual(i["bbox"]) for i in importacoes])
-        area = _caixa_area_igual(bbox)
+        if poligono is not None:
+            # Mesma projeção de áreas iguais (x = lon, y = sen lat) aplicada ao polígono
+            area = shapely.transform(poligono, lambda c: np.column_stack([c[:, 0], np.sin(np.radians(c[:, 1]))]))
+        else:
+            area = _caixa_area_igual(bbox)
         return float(shapely.intersection(uniao, area).area / area.area) if area.area > 0 else None
 
     @staticmethod

@@ -2,6 +2,9 @@ import json
 import unicodedata
 from typing import Dict, List, Optional
 
+import shapely
+import shapely.geometry
+
 from db.database import get_db_connection, ph
 
 COLUNAS = ("id_externo", "nome", "tipo", "fonte", "geometria_geojson",
@@ -10,8 +13,9 @@ COLUNAS = ("id_externo", "nome", "tipo", "fonte", "geometria_geojson",
 # Categoria pelo mecanismo principal (primeiro termo do tipo). Aceita termos do
 # GEM (inglês) e de bases brasileiras (português).
 CATEGORIAS = [
-    ("normal", ("normal",)),
-    ("reversa", ("reverse", "thrust", "subduction", "reversa", "inversa", "empurr", "cavalgamento")),
+    ("normal", ("normal", "extensional")),
+    ("reversa", ("reverse", "thrust", "subduction", "reversa", "inversa", "empurr", "cavalgamento",
+                 "contracional", "compressional")),
     ("transcorrente", ("dextral", "sinistral", "strike", "transform", "transcorr")),
     ("dorsal", ("spreading", "ridge", "dorsal")),
 ]
@@ -70,8 +74,21 @@ class FalhaModelo:
         return {"novos": novos, "atualizados": len(registros) - novos}
 
     @staticmethod
-    def listar(bbox: Optional[Dict] = None, limite: int = 5000) -> Dict:
-        """Falhas que cruzam a área, como FeatureCollection GeoJSON, + total."""
+    def versao() -> str:
+        """Muda sempre que falhas são inseridas, atualizadas ou apagadas."""
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS total, MAX(id) AS maior, MAX(importado_em) AS ultima FROM falhas")
+        linha = dict(cursor.fetchone())
+        conn.close()
+        return f"{linha['total']}:{linha['maior']}:{linha['ultima']}"
+
+    @staticmethod
+    def listar(bbox: Optional[Dict] = None, limite: int = 5000, tolerancia: Optional[float] = None) -> Dict:
+        """Falhas que cruzam a área, como FeatureCollection GeoJSON, + total.
+
+        `tolerancia` (graus) simplifica os traçados para exibição em escala pequena.
+        """
         where, valores = "", []
         if bbox:
             where = "WHERE min_lat <= ? AND max_lat >= ? AND min_lon <= ? AND max_lon >= ?"
@@ -93,10 +110,14 @@ class FalhaModelo:
         features = []
         for l in linhas:
             l = dict(l)
+            geometria = json.loads(l["geometria_geojson"])
+            if tolerancia:
+                geometria = shapely.geometry.mapping(
+                    shapely.simplify(shapely.geometry.shape(geometria), tolerancia, preserve_topology=False))
             features.append({
                 "type": "Feature",
                 "id": l["id"],
-                "geometry": json.loads(l["geometria_geojson"]),
+                "geometry": geometria,
                 "properties": {
                     "id": l["id"], "nome": l["nome"], "tipo": l["tipo"], "fonte": l["fonte"],
                     "categoria": categoria_falha(l["tipo"]),

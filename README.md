@@ -31,6 +31,30 @@ Requisitos: Python 3.10+. PostgreSQL é opcional (sem ele, o sistema usa SQLite 
 
 ---
 
+## 🇧🇷 Brasil inteiro com dados reais
+
+1. **Dados → Importar epicentros → Catálogo: Centro de Sismologia da USP.** Enquadre o Brasil, deixe a magnitude mínima baixa (ex.: 0) e o início em 1700 para trazer todo o catálogo (~9.500 eventos na caixa do Brasil, ~1.500 dentro do território; o servidor da USP leva cerca de 1 min).
+2. **Dados → SGB — Estruturas do Brasil → Importar.** Traz ~23.800 falhas e zonas de cisalhamento (sem os lineamentos de foliação). O primeiro download leva ~20 s; depois fica em cache.
+3. **Análise → Território → Brasil** (ou um estado), profundidade até 35 km com *"Tratar sismos sem profundidade como rasos"* marcado → **Rodar análise** (~4 s).
+4. Em *Exibição no mapa*, marque **"Mostrar só os sismos dentro do Brasil"** para esconder os grandes sismos andinos que vêm junto na caixa.
+
+**Resultado com os dados reais** (novembro/2026; 1.465 sismos no território, 23.844 estruturas):
+
+| Medida | Observado | Esperado ao acaso |
+|---|---|---|
+| Mediana da distância à estrutura mais próxima | 7,0 km | 7,6 km (p = 0,027) |
+| Sismos a até 5 km de uma estrutura | 43,8% | 38,3% (1,14×, p ajustado = 0,004) |
+| A até 10, 20 e 50 km | ≈ igual ao acaso | — |
+
+**Conclusão: associação fraca, mas significativa, restrita aos primeiros 5 km** — compatível com a literatura, que descreve sismos intraplaca brasileiros perto de zonas de fraqueza antigas, possivelmente reativadas, e não necessariamente sobre elas.
+
+**Cuidados específicos do Brasil** (leia antes de concluir):
+- **As estruturas do SGB são antigas** (em geral pré-cambrianas), não falhas comprovadamente ativas; só 178 de 32 mil têm mergulho registrado. A pergunta testada é sobre zonas de fraqueza herdadas.
+- **Erro de localização:** epicentros brasileiros costumam ter incerteza de 5–10 km ou mais (rede esparsa); os históricos, dezenas de km. Isso é da ordem do buffer de 5 km — prefira eventos recentes (*Mais opções → Início*) para confirmar.
+- **Vieses de amostragem:** a rede é mais densa no Sudeste e áreas mais habitadas registram mais sismos; algumas regiões foram mais mapeadas geologicamente que outras. Os dois podem se combinar e produzir correlação aparente. Repetir a análise por estado ajuda a separar.
+- **Profundidade:** a maioria dos sismos brasileiros tem profundidade não determinada (vazia ou 0); por padrão eles são tratados como rasos.
+- **Escala da projeção:** com o Brasil inteiro as distâncias perto das bordas ficam até ~4% maiores (o sistema informa o valor exato).
+
 ## 🧭 Como usar (passo a passo)
 
 1. **Dados → Dados de demonstração → Carregar** (ou importe os seus):
@@ -79,6 +103,7 @@ Coquimbo, Chile — 984 sismos M ≥ 2,5 (2016–2026), 13 falhas do GEM, sismos
 
 ## ⚠️ Limitações e cuidados de interpretação
 
+- **Território em vez de retângulo.** Para o Brasil ou um estado, use a opção *Território*: a hipótese nula sorteia pontos só dentro do contorno do IBGE. Um retângulo incluiria oceano e países vizinhos, sem falhas mapeadas pelo SGB nem cobertura do catálogo brasileiro.
 - **Área de estudo muda o resultado.** A hipótese nula só é justa onde houve coleta de dados. Por isso o padrão é a **área importada** e toda análise informa a **cobertura** (% da área com sismos importados), com aviso abaixo de 95%. Exemplo real: em Coquimbo, uma área 36% maior que a importada levava a "mais perto, sem excesso"; com a área exata, "associação significativa".
 - **Falhas são traços em superfície.** Sismos profundos acontecem no plano inclinado da falha, longe do traço — use o filtro de profundidade (padrão ≤ 35 km). A distância é medida em 2D (epicentro × traço).
 - **Hipótese nula uniforme.** Não considera variações de detecção da rede sismográfica (ex.: oceano × continente).
@@ -91,12 +116,17 @@ Coquimbo, Chile — 984 sismos M ≥ 2,5 (2016–2026), 13 falhas do GEM, sismos
 
 | Dado | Fonte | Licença |
 |---|---|---|
-| Epicentros | [USGS FDSN Event API](https://earthquake.usgs.gov/fdsnws/event/1/) (até 20.000 eventos por importação) | Domínio público |
+| Epicentros (mundo) | [USGS FDSN Event API](https://earthquake.usgs.gov/fdsnws/event/1/) (até 20.000 eventos por importação) | Domínio público |
+| Epicentros (Brasil) | [Centro de Sismologia da USP — FDSN](https://www.moho.iag.usp.br/fdsnws/event/1/) (Rede Sismográfica Brasileira) | Termos de uso não localizados* — citar a RSBR: *The Brazilian Seismographic Network (RSBR): Improving Seismic Monitoring in Brazil*, Seismological Research Letters (2018), [doi:10.1785/0220170227](https://doi.org/10.1785/0220170227) |
+| Estruturas do Brasil | [SGB — Estruturas_GIS_Brasil_2004](https://geoportal.sgb.gov.br/server/rest/services/geologia/Estruturas_GIS_Brasil_2004/MapServer) (Carta Geológica do Brasil ao Milionésimo, 1:1.000.000), cache de 90 dias em `data/cache/` | Dados públicos do SGB/CPRM; termos de uso não localizados* — citar SGB/CPRM, Carta Geológica do Brasil ao Milionésimo |
+| Contornos do Brasil e UFs | [IBGE — Malhas territoriais (API v3)](https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR?formato=application/vnd.geo%2Bjson&intrarregiao=UF) | Dados públicos do IBGE |
 | Falhas ativas | [GEM Global Active Faults](https://github.com/GEMScienceTools/gem-global-active-faults) — cache local de 30 dias em `data/cache/` | CC-BY-SA 4.0 (citar Styron & Pagani, 2020) |
-| Falhas do Brasil | Upload de arquivo (ex.: [GeoSGB / SGB-CPRM](https://geosgb.sgb.gov.br)) em coordenadas geográficas | Conforme a fonte |
+| Outras bases de falhas | Upload de arquivo (GeoJSON/shapefile) em coordenadas geográficas | Conforme a fonte |
 | Mapa offline | [Natural Earth](https://www.naturalearthdata.com) 1:50m (contornos dos países) | Domínio público |
 | Mapas online | OpenTopoMap, OpenStreetMap, Esri | Conforme cada serviço |
 | Busca de lugares | Nominatim (OpenStreetMap) | ODbL |
+
+\* Não encontrei uma página com termos de uso para o catálogo da USP nem para a camada do SGB. Para uso acadêmico com citação é o caminho usual, mas confirme com as instituições antes de publicar resultados ou redistribuir os dados.
 
 Detalhes da demonstração em [`data/demo/LEIA-ME.md`](data/demo/LEIA-ME.md); bibliotecas de terceiros em [`static/vendor/LICENCAS.md`](static/vendor/LICENCAS.md).
 
@@ -123,10 +153,11 @@ sismoFalhas/
 │   ├── importacao.py            # Registro das áreas importadas e cobertura
 │   ├── exportacao.py            # CSV, GeoJSON e JSON
 │   ├── epicentro.py / falha.py  # Persistência; categoria da falha pelo mecanismo
+│   ├── territorio.py            # Brasil e UFs (IBGE) como área de estudo
 │   ├── demo.py                  # Dados de demonstração offline
 │   ├── geocodificacao.py        # Nominatim e localização por IP
 │   ├── sistema.py               # Contagens e histórico
-│   └── fontes/                  # usgs.py, gem.py, arquivo_falhas.py, geometria.py
+│   └── fontes/                  # usgs.py, usp.py, gem.py, sgb.py, arquivo_falhas.py, geometria.py
 ├── db/database.py               # PostgreSQL ou SQLite: epicentros, falhas, analises, importacoes
 ├── rotas/rotas.py               # Endpoints HTTP (Blueprint)
 ├── templates/index.html         # VIEW
@@ -135,9 +166,9 @@ sismoFalhas/
 │   ├── js/analise.js            # Painel da análise
 │   ├── css/style.css
 │   ├── vendor/                  # Bibliotecas locais (offline)
-│   └── data/                    # Contornos dos países (mapa offline)
+│   └── data/                    # Contornos dos países (mapa offline) e das UFs (IBGE)
 ├── data/demo/                   # Dados de demonstração + LEIA-ME
-├── tests/                       # 75 testes (pytest)
+├── tests/                       # 90 testes (pytest)
 ├── app.py                       # Ponto de entrada (porta 5000)
 ├── carregar_demo.py             # Carrega a demonstração pela linha de comando
 └── setup_vm.sh                  # Instalação no Ubuntu Server (--demo, --servico)
@@ -151,21 +182,23 @@ sismoFalhas/
 | GET | `/api/status` | Banco em uso e contagens |
 | POST | `/api/demo` | Carrega os dados de demonstração (offline) |
 | GET | `/api/regioes?q=` · `/api/reverso?lat=&lon=` · `/api/minha-localizacao` | Navegação no mapa |
-| POST | `/api/epicentros/importar` | USGS. Corpo: `{bbox:{sul,oeste,norte,leste}, inicio, fim, min_mag}` |
-| GET / DELETE | `/api/epicentros` | Consulta (`sul, oeste, norte, leste, min_mag, inicio, fim, limite`) / apaga todos |
+| POST | `/api/epicentros/importar` | Corpo: `{fonte: "usgs"\|"usp", bbox:{sul,oeste,norte,leste}, inicio, fim, min_mag}` |
+| GET / DELETE | `/api/epicentros` | Consulta (`sul, oeste, norte, leste, min_mag, inicio, fim, limite, territorio`) / apaga todos |
 | GET | `/api/epicentros/resumo` | Total, faixa de magnitude e período |
 | POST | `/api/falhas/importar-gem` | GEM na área. Corpo: `{bbox}` |
+| POST | `/api/falhas/importar-sgb` | Estruturas do SGB na área. Corpo: `{bbox, incluir_lineamentos}` |
 | POST | `/api/falhas/upload` | Multipart: `arquivo` (.geojson/.json/.zip), `fonte` |
-| GET / DELETE | `/api/falhas` | Consulta por área (FeatureCollection) / apaga (`?fonte=`) |
+| GET / DELETE | `/api/falhas` | Consulta por área (`tolerancia` em graus simplifica os traçados) / apaga (`?fonte=`) |
 | GET | `/api/falhas/fontes` | Falhas por fonte |
 | GET | `/api/importacoes?tipo=` | Áreas consultadas em cada importação |
+| GET | `/api/territorios` · `/api/territorios/<BR\|UF>` | Lista de territórios / contorno e caixa |
 | POST | `/api/analise` | Roda e salva a análise (parâmetros abaixo) |
 | GET / DELETE | `/api/analises` | Lista com conclusão / apaga todas |
 | GET / DELETE | `/api/analises/<id>` | Resultado completo / apaga uma |
 | GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas (GeoJSON) |
 | GET | `/api/analises/<id>/exportar?formato=` | `csv`, `geojson` ou `json` (download) |
 
-**`POST /api/analise`:** `bbox` (obrigatório), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
+**`POST /api/analise`:** `bbox` ou `territorio` (`"BR"` ou sigla da UF — a hipótese nula fica dentro do polígono), `incluir_sem_profundidade` (padrão `true`), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
 
 ## ⚙️ Configuração (variáveis de ambiente, opcionais)
 
@@ -189,7 +222,7 @@ sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
 ```bash
 python -m pytest -q
 ```
-75 testes: validação das entradas, leitura de GeoJSON/shapefile, distâncias geodésicas, calibração estatística, exportação, registro de importações, demonstração offline e API.
+90 testes: validação das entradas, leitura de GeoJSON/shapefile, catálogo da USP, paginação do SGB, territórios do IBGE (áreas oficiais), sorteio dentro do polígono, erro de escala da projeção, distâncias geodésicas, calibração estatística, exportação, registro de importações, demonstração offline e API.
 
 ## 🗺️ Roteiro
 
@@ -202,3 +235,4 @@ python -m pytest -q
 | 4 | Interface da análise (conclusão, gráfico, zonas, calor) | ✅ |
 | 5 | Registro de importações, área importada, exportação | ✅ |
 | 6 | Funcionamento offline, demonstração, instalação e documentação | ✅ |
+| 7 | Brasil inteiro: catálogo da USP, estruturas do SGB, território/UF como área de estudo | ✅ |

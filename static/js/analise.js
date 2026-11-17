@@ -68,9 +68,38 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Territórios (Brasil e UFs) para a área de estudo
+    let territoriosCarregados = false;
+    async function carregarTerritorios() {
+        if (territoriosCarregados) return;
+        try {
+            const data = await api('/api/territorios');
+            $('an-territorio').innerHTML = data.territorios
+                .map(t => `<option value="${t.codigo}">${escapeHtml(t.nome)}</option>`).join('');
+            territoriosCarregados = true;
+        } catch (e) {
+            showAlert(e.message);
+        }
+    }
+
+    async function desenharTerritorio(codigo, enquadrarMapa = false) {
+        const data = await api(`/api/territorios/${encodeURIComponent(codigo)}`);
+        camadaArea.clearLayers();
+        L.geoJSON(data.geometria, {
+            style: { color: COR_OBSERVADO, weight: 2, dashArray: '8 6', fill: false }, interactive: false
+        }).addTo(camadaArea);
+        if (enquadrarMapa) enquadrar(limitesBbox(data.bbox));
+    }
+
+    $('an-territorio').addEventListener('change', (e) => {
+        document.querySelector('input[name="an-area"][value="territorio"]').checked = true;
+        desenharTerritorio(e.target.value, true).catch(err => showAlert(err.message));
+    });
+
     SF.ganchos.mostrarView = (nome) => {
         if (nome === 'analise') {
             atualizarBboxAnalise();
+            carregarTerritorios();
             carregarFontes();
         }
     };
@@ -99,6 +128,9 @@ document.addEventListener('DOMContentLoaded', () => {
             bbox,
             // 'importada': o servidor usa a caixa exata das importações que cruzam a área visível
             area: document.querySelector('input[name="an-area"]:checked').value,
+            territorio: document.querySelector('input[name="an-area"]:checked').value === 'territorio'
+                ? $('an-territorio').value : null,
+            incluir_sem_profundidade: $('an-sem-prof').checked,
             buffers_km: buffers,
             n_simulacoes: Number($('an-sims').value),
             prof_max_km: $('an-prof').value || null,
@@ -158,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             p.inicio || p.fim ? `${p.inicio || '…'} a ${p.fim || '…'}` : null
         ].filter(Boolean).join(' · ');
         const cobertura = r.cobertura_importada_pct != null ? ` · ${br(r.cobertura_importada_pct, 0)}% da área com sismos importados` : '';
-        $('res-meta').textContent = `${r.n_epicentros.toLocaleString('pt-BR')} epicentros · ${r.n_falhas} falhas · ` +
+        $('res-meta').textContent = `${r.n_epicentros.toLocaleString('pt-BR')} epicentros · ${r.n_falhas.toLocaleString('pt-BR')} falhas · ` +
             `${filtros} · ${p.n_simulacoes} simulações · área ${Math.round(r.area_km2).toLocaleString('pt-BR')} km²${cobertura}`;
 
         // Exportação (só para análises salvas)
@@ -297,9 +329,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function desenharNoMapa(r) {
         camadaArea.clearLayers();
-        L.rectangle(limitesBbox(r.parametros.bbox), {
-            color: COR_OBSERVADO, weight: 2, dashArray: '8 6', fill: false, interactive: false
-        }).addTo(camadaArea);
+        if (r.parametros.territorio) {
+            desenharTerritorio(r.parametros.territorio).catch(err => showAlert(err.message));
+        } else {
+            L.rectangle(limitesBbox(r.parametros.bbox), {
+                color: COR_OBSERVADO, weight: 2, dashArray: '8 6', fill: false, interactive: false
+            }).addTo(camadaArea);
+        }
         // Zona padrão: o primeiro buffer com excesso significativo, senão o de 10 km (ou o 1º)
         const sig = r.buffers.find(b => (b.p_ajustado ?? b.p_valor * r.buffers.length) < 0.05 && (b.razao || 0) > 1);
         const padrao = sig || r.buffers.find(b => b.km === 10) || r.buffers[0];
@@ -311,8 +347,11 @@ document.addEventListener('DOMContentLoaded', () => {
         kmSelecionado = km;
         $('res-buffers').querySelectorAll('tr').forEach(tr =>
             tr.classList.toggle('selecionada', Number(tr.dataset.km) === km));
+        // Para áreas grandes (ex.: Brasil) a primeira vez leva alguns segundos
+        const aviso = setTimeout(() => showAlert(`Calculando a zona de ${br(km, 0)} km em torno das falhas...`, 'info'), 1200);
         try {
             const data = await api(`/api/analises/${atual.id}/buffer?km=${km}`);
+            clearTimeout(aviso);
             if (kmSelecionado !== km) return; // outro buffer foi escolhido enquanto carregava
             camadaBuffer.clearLayers();
             if (data.geometria) {
@@ -323,6 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (enquadrar) enquadrarArea();
         } catch (e) {
+            clearTimeout(aviso);
             showAlert(`Não foi possível desenhar a zona de ${km} km: ${e.message}`);
         }
     }

@@ -2,7 +2,7 @@ from flask import Response, request
 
 from controle.epicentros_controle import ErroValidacao, ler_bbox, ler_data, ler_magnitude
 from controle.respostas import resposta_erro, resposta_sucesso
-from modelo import exportacao
+from modelo import exportacao, territorio as territorios
 from modelo.analise import AnaliseModelo
 from modelo.correlacao import ErroAnalise
 from modelo.importacao import ImportacaoModelo
@@ -43,8 +43,16 @@ class AnaliseControle:
     def executar():
         dados = request.get_json(silent=True) or {}
         try:
-            bbox = ler_bbox(dados.get("bbox") or {})
-            if dados.get("area") == "importada":
+            territorio = (dados.get("territorio") or "").strip().upper() or None
+            if territorio:
+                try:
+                    territorios.poligono(territorio)
+                except ValueError as e:
+                    raise ErroValidacao(str(e))
+                bbox = territorios.bbox(territorio)  # a caixa vem do território
+            else:
+                bbox = ler_bbox(dados.get("bbox") or {})
+            if dados.get("area") == "importada" and not territorio:
                 # Área exata das importações de sismos que cruzam a área visível
                 bbox = ImportacaoModelo.area_importada("epicentros", bbox)
                 if bbox is None:
@@ -65,6 +73,8 @@ class AnaliseControle:
                 "semente": _ler_numero(dados.get("semente"), "semente", 0, 2**31 - 1, inteiro=True) or 42,
                 "nome": (dados.get("nome") or "").strip()[:120] or None,
                 "salvar": dados.get("salvar", True) is not False,
+                "territorio": territorio,
+                "incluir_sem_profundidade": dados.get("incluir_sem_profundidade", True) is not False,
             }
         except ErroValidacao as e:
             return resposta_erro(str(e))
@@ -111,6 +121,18 @@ class AnaliseControle:
         if not SistemaModelo.apagar_analise(analise_id):
             return resposta_erro("Análise não encontrada.", status=404)
         return resposta_sucesso(mensagem="Análise apagada.")
+
+    @staticmethod
+    def territorios():
+        return resposta_sucesso({"territorios": territorios.listar()})
+
+    @staticmethod
+    def contorno_territorio(codigo: str):
+        try:
+            return resposta_sucesso({"codigo": codigo.upper(), "nome": territorios.nome(codigo),
+                                     "bbox": territorios.bbox(codigo), "geometria": territorios.geojson(codigo)})
+        except (ValueError, KeyError):
+            return resposta_erro("Território desconhecido.", status=404)
 
     @staticmethod
     def importacoes():
