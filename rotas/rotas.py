@@ -1,5 +1,6 @@
 from flask import Blueprint
 
+from controle.analise_controle import AnaliseControle
 from controle.epicentros_controle import EpicentrosControle
 from controle.falhas_controle import FalhasControle
 from controle.sistema_controle import SistemaControle
@@ -79,6 +80,17 @@ def fontes_falhas():
 @rotas_bp.route("/api/falhas", methods=["DELETE"])
 def apagar_falhas():
     return FalhasControle.apagar()
+
+
+# ---- Análise de correlação ----
+@rotas_bp.route("/api/analise", methods=["POST"])
+def executar_analise():
+    return AnaliseControle.executar()
+
+
+@rotas_bp.route("/api/analises/<int:analise_id>", methods=["GET"])
+def obter_analise(analise_id):
+    return AnaliseControle.obter(analise_id)
 
 
 # ---- Análises salvas (preenchidas a partir da Fase 5) ----

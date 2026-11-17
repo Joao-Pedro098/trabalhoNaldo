@@ -106,6 +106,25 @@ class FalhaModelo:
         return {"total": total, "falhas": {"type": "FeatureCollection", "features": features}}
 
     @staticmethod
+    def para_analise(bbox: Dict, fontes: Optional[List[str]] = None) -> List[Dict]:
+        """Todas as falhas que cruzam a área (sem limite), prontas para o motor."""
+        where = "WHERE min_lat <= ? AND max_lat >= ? AND min_lon <= ? AND max_lon >= ?"
+        valores = [bbox["norte"], bbox["sul"], bbox["leste"], bbox["oeste"]]
+        if fontes:
+            where += f" AND fonte IN ({', '.join('?' for _ in fontes)})"
+            valores += list(fontes)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(_sql(f"SELECT id, nome, tipo, fonte, geometria_geojson FROM falhas {where}"), valores)
+        linhas = [dict(l) for l in cursor.fetchall()]
+        conn.close()
+        return [{
+            "id": l["id"], "nome": l["nome"], "tipo": l["tipo"], "fonte": l["fonte"],
+            "categoria": categoria_falha(l["tipo"]),
+            "geometria": json.loads(l["geometria_geojson"]),
+        } for l in linhas]
+
+    @staticmethod
     def fontes() -> List[Dict]:
         """Quantidade de falhas por fonte."""
         conn = get_db_connection()

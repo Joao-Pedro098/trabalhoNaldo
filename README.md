@@ -14,6 +14,7 @@ sismoFalhas/
 │   ├── sistema_controle.py    # Página, busca de região, localização, status, análises
 │   ├── epicentros_controle.py # Importação/consulta de epicentros (com validação)
 │   ├── falhas_controle.py     # Importação do GEM, upload de arquivo, consulta de falhas
+│   ├── analise_controle.py    # Validação e execução da análise de correlação
 │   └── respostas.py           # Respostas JSON padronizadas {sucesso, ...}
 ├── db/
 │   └── database.py            # PostgreSQL ou SQLite; tabelas epicentros, falhas, analises
@@ -21,6 +22,8 @@ sismoFalhas/
 │   ├── geocodificacao.py      # Nominatim (busca/reverso) e localização por IP
 │   ├── epicentro.py           # Persistência e consultas de epicentros
 │   ├── falha.py               # Persistência, consulta e categoria (mecanismo) das falhas
+│   ├── correlacao.py          # MOTOR: distâncias, Monte Carlo, buffers, KS, ranking (sem banco)
+│   ├── analise.py             # Carrega dados do banco, roda o motor e salva a análise
 │   ├── fontes/usgs.py         # Cliente do catálogo FDSN da USGS
 │   ├── fontes/gem.py          # Base mundial de falhas ativas do GEM (com cache local)
 │   ├── fontes/arquivo_falhas.py # Leitura de GeoJSON e shapefile (.zip) enviados
@@ -54,6 +57,8 @@ sismoFalhas/
 | GET | `/api/falhas?sul=&oeste=&norte=&leste=&limite=` | Falhas que cruzam a área (FeatureCollection) + total |
 | GET | `/api/falhas/fontes` | Quantidade de falhas por fonte |
 | DELETE | `/api/falhas?fonte=` | Apaga as falhas de uma fonte (ou todas, sem `fonte`) |
+| POST | `/api/analise` | Roda a análise (ver parâmetros abaixo) e salva |
+| GET | `/api/analises/<id>` | Resultado completo de uma análise salva |
 | GET / DELETE | `/api/analises` | Lista / apaga análises salvas |
 
 ## 🗺️ Roteiro
@@ -63,7 +68,7 @@ sismoFalhas/
 | 0 | Esqueleto, banco, interface base | ✅ |
 | 1 | Importação de epicentros (USGS) e camada no mapa | ✅ |
 | 2 | Importação de falhas (GEM / upload GeoJSON e shapefile) | ✅ |
-| 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ⏳ |
+| 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ✅ |
 | 4 | Interface de análise (área, gráficos, mapa de calor) | ⏳ |
 | 5 | Análises salvas e exportação CSV/GeoJSON | ⏳ |
 | 6 | Acabamento, dados de demonstração offline | ⏳ |
@@ -89,6 +94,32 @@ sismoFalhas/
   - Fontes sugeridas para o Brasil: GeoSGB / SGB-CPRM (falhas e zonas de cisalhamento dos mapas geológicos).
 - **Categoria** pelo mecanismo principal: normal, reversa/empurrão, transcorrente, dorsal ou outra (termos em inglês e português).
 - Reenviar o mesmo traçado **atualiza** em vez de duplicar. Cada fonte pode ser apagada separadamente.
+
+## 📐 Análise de correlação (Fase 3)
+
+**Pergunta:** os epicentros estão mais perto das falhas do que estariam por acaso?
+
+1. **Projeção:** azimutal equidistante centrada na área (distâncias em km, pouca distorção em escala regional; aviso acima de 2.500 km).
+2. **Distância observada:** de cada epicentro à falha mais próxima (índice espacial STRtree). Falhas até o maior buffer *fora* da área também contam.
+3. **Hipótese nula:** epicentros uniformes na área de estudo (uniforme na esfera dentro da caixa).
+4. **Monte Carlo** (padrão 999 simulações, semente fixa → reprodutível): catálogos aleatórios do mesmo tamanho.
+   - *Mediana*: p = (1 + nº de simulações com mediana ≤ observada) / (n + 1).
+   - *Buffers* (padrão 5, 10, 20, 50 km): % observada × esperada, razão e p-valor.
+5. **Conclusão** combina os dois testes, porque respondem perguntas diferentes:
+
+| Código | Situação |
+|---|---|
+| `associacao` | Mediana menor que o acaso **e** excesso de eventos junto às falhas |
+| `proximidade_sem_excesso` | Mais perto no geral, mas nenhum excesso colado às falhas (típico de falha inclinada/subducção ou estrutura não mapeada) |
+| `excesso_local` | Mediana igual ao acaso, mas excesso junto às falhas |
+| `sem_associacao` | Nada significativo |
+| `afastamento` | Epicentros mais longe que o acaso |
+
+6. **Complementos:** teste KS (diferença de *forma* entre as distribuições — informativo, não entra na conclusão), Spearman magnitude × distância, ranking das falhas (eventos, magnitude máxima, energia `log E = 1,5M + 4,8`, eventos por 100 km), histograma observado × esperado e, por epicentro, a distância e o ponto mais próximo na falha.
+
+**Parâmetros de `POST /api/analise`:** `bbox` (obrigatório), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
+
+> 💡 **Profundidade importa.** Falhas mapeadas são traços em superfície. Em zonas de subducção, sismos profundos ocorrem no plano inclinado, dezenas a centenas de km do traço. Use `prof_max_km` (ex.: 35) para analisar só a sismicidade crustal rasa.
 
 ## 🚀 Como executar
 
