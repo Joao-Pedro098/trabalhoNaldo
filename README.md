@@ -31,7 +31,7 @@ sismoFalhas/
 │   └── sistema.py             # Contagens e análises salvas
 ├── rotas/
 │   └── rotas.py               # Endpoints HTTP (Blueprint)
-├── static/                    # CSS e JS (Leaflet)
+├── static/                    # CSS e JS: map.js (mapa, dados) e analise.js (painel da análise)
 ├── templates/index.html       # VIEW
 ├── tests/                     # pytest
 ├── app.py                     # Ponto de entrada (porta 5000)
@@ -59,6 +59,7 @@ sismoFalhas/
 | DELETE | `/api/falhas?fonte=` | Apaga as falhas de uma fonte (ou todas, sem `fonte`) |
 | POST | `/api/analise` | Roda a análise (ver parâmetros abaixo) e salva |
 | GET | `/api/analises/<id>` | Resultado completo de uma análise salva |
+| GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas da análise (GeoJSON, recortada à área) |
 | GET / DELETE | `/api/analises` | Lista / apaga análises salvas |
 
 ## 🗺️ Roteiro
@@ -69,7 +70,7 @@ sismoFalhas/
 | 1 | Importação de epicentros (USGS) e camada no mapa | ✅ |
 | 2 | Importação de falhas (GEM / upload GeoJSON e shapefile) | ✅ |
 | 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ✅ |
-| 4 | Interface de análise (área, gráficos, mapa de calor) | ⏳ |
+| 4 | Interface de análise (área, gráficos, mapa de calor) | ✅ |
 | 5 | Análises salvas e exportação CSV/GeoJSON | ⏳ |
 | 6 | Acabamento, dados de demonstração offline | ⏳ |
 
@@ -104,7 +105,8 @@ sismoFalhas/
 3. **Hipótese nula:** epicentros uniformes na área de estudo (uniforme na esfera dentro da caixa).
 4. **Monte Carlo** (padrão 999 simulações, semente fixa → reprodutível): catálogos aleatórios do mesmo tamanho.
    - *Mediana*: p = (1 + nº de simulações com mediana ≤ observada) / (n + 1).
-   - *Buffers* (padrão 5, 10, 20, 50 km): % observada × esperada, razão e p-valor.
+   - *Buffers* (padrão 5, 10, 20, 50 km): % observada × esperada, razão e p-valor, **corrigido por Bonferroni** (p × nº de buffers) — testar vários buffers de uma vez inflaria o falso positivo.
+   - *Afastamento*: cauda oposta da mediana; só se conclui "mais longe" com p < 0,05.
 5. **Conclusão** combina os dois testes, porque respondem perguntas diferentes:
 
 | Código | Situação |
@@ -120,6 +122,15 @@ sismoFalhas/
 **Parâmetros de `POST /api/analise`:** `bbox` (obrigatório), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
 
 > 💡 **Profundidade importa.** Falhas mapeadas são traços em superfície. Em zonas de subducção, sismos profundos ocorrem no plano inclinado, dezenas a centenas de km do traço. Use `prof_max_km` (ex.: 35) para analisar só a sismicidade crustal rasa.
+
+## 🖥️ Interface da análise (Fase 4)
+
+- **Aba Análise:** área de estudo = área visível do mapa; profundidade máxima (padrão ≤ 35 km), magnitude mínima, buffers, nº de simulações; em *Mais opções*: período, fontes de falhas e nome.
+- **Resultado:** cartão de conclusão (verde = associação, amarelo = parcial, cinza = sem associação), medianas e p-valor, tabela de buffers (clique mostra a zona no mapa), histograma observado × esperado (Chart.js), falhas com mais eventos (clique enquadra a falha) e outros testes (KS, Spearman).
+- **Mapa:** contorno da área de estudo, zona de buffer, e no popup de cada epicentro a distância e uma linha tracejada até o ponto mais próximo da falha.
+- **Camada "Densidade (calor)"** no seletor de camadas (Leaflet.heat, peso pela magnitude).
+- **Histórico:** clicar numa análise salva reabre o resultado e enquadra a área.
+- **Avisos:** poucos eventos, área grande e quando os epicentros ocupam só uma pequena parte da área de estudo (sinal de área maior que a importada, o que enviesa a hipótese nula).
 
 ## 🚀 Como executar
 

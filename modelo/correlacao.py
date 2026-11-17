@@ -21,6 +21,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 import shapely
+import shapely.geometry
 from pyproj import Transformer
 from scipy import stats
 
@@ -166,6 +167,8 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
 
     mediana_obs = float(np.median(dist_obs))
     p_mediana = (1 + int(np.sum(medianas_sim <= mediana_obs))) / (n_simulacoes + 1)
+    # Cauda oposta: os eventos estão significativamente mais LONGE do que o acaso?
+    p_afastamento = (1 + int(np.sum(medianas_sim >= mediana_obs))) / (n_simulacoes + 1)
 
     buffers = []
     for i, km in enumerate(buffers_km):
@@ -179,6 +182,8 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
             "esperado_pct": round(100 * frac_esp, 1),
             "razao": round(frac_obs / frac_esp, 2) if frac_esp > 0 else None,
             "p_valor": round(p, 4),
+            # Bonferroni: vários buffers testados ao mesmo tempo inflariam o falso positivo
+            "p_ajustado": round(min(1.0, p * len(buffers_km)), 4),
         })
 
     # KS: alternativa "greater" = CDF observada acima da aleatória (eventos mais perto)
@@ -209,8 +214,11 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     for fid, r in ranking.items():
         f = info_falha[fid]
         comp = indice.comprimento_km.get(fid, 0.0)
+        coords = [p for parte in _partes_linha(f["geometria"]) for p in parte]
         lista_ranking.append({
             "falha_id": fid, "nome": f.get("nome"), "tipo": f.get("tipo"),
+            "limites": [[min(c[1] for c in coords), min(c[0] for c in coords)],
+                        [max(c[1] for c in coords), max(c[0] for c in coords)]],
             "categoria": f.get("categoria"), "fonte": f.get("fonte"),
             "eventos": r["eventos"], "mag_max": r["mag_max"],
             "energia_j": r["energia_j"],
@@ -220,7 +228,8 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     lista_ranking.sort(key=lambda r: (r["eventos"], r["energia_j"]), reverse=True)
 
     # ---- histograma observado x esperado
-    teto = max(buffers_km[-1], float(np.percentile(np.concatenate([dist_obs, dist_pool]), 95)))
+    # O último intervalo acumula tudo acima do teto (o painel o rotula como "≥")
+    teto = max(buffers_km[-1], float(np.percentile(np.concatenate([dist_obs, dist_pool]), 99)))
     bordas = np.linspace(0, teto, 21)
     obs_hist, _ = np.histogram(np.clip(dist_obs, 0, teto), bins=bordas)
     pool_hist, _ = np.histogram(np.clip(dist_pool, 0, teto), bins=bordas)
@@ -245,6 +254,15 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         avisos.append(f"Área grande ({extensao_km:,.0f} km): a projeção local distorce as distâncias nas bordas.".replace(",", "."))
     if n < 30:
         avisos.append(f"Poucos epicentros ({n}): o teste tem pouco poder estatístico.")
+    # Se os eventos ocupam só parte da área, os pontos aleatórios caem onde não houve
+    # coleta de dados (ex.: área de estudo maior que a importada) e a comparação fica enviesada.
+    cobertura = area_bbox_km2({"sul": float(lat.min()), "norte": float(lat.max()),
+                               "oeste": float(lon.min()), "leste": float(lon.max())}) / area_bbox_km2(bbox)
+    if cobertura < 0.25:
+        avisos.append(
+            f"Os epicentros ocupam só {round(100 * cobertura)}% da área de estudo. Se a área for maior que a "
+            "região onde os sismos foram importados, os pontos aleatórios caem onde não há dados e o resultado "
+            "fica enviesado: ajuste o mapa à área importada.")
 
     distancias_obs = _resumo(dist_obs)
     distancias_ale = _resumo(dist_pool)
@@ -258,7 +276,8 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         "projecao": proj_local(bbox),
         "distancias": distancias_obs,
         "aleatorio": distancias_ale,
-        "teste_mediana": {"p_valor": round(p_mediana, 4), "mediana_obs_km": round(mediana_obs, 2),
+        "teste_mediana": {"p_valor": round(p_mediana, 4), "p_afastamento": round(p_afastamento, 4),
+                          "mediana_obs_km": round(mediana_obs, 2),
                           "mediana_sim_media_km": round(float(np.mean(medianas_sim)), 2)},
         # KS detecta qualquer diferença de FORMA entre as distribuições (não só "mais perto");
         # por isso não entra na conclusão, serve como informação complementar.
@@ -276,6 +295,37 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     codigo, texto = interpretar(resultado)
     resultado.update(conclusao=codigo, conclusao_titulo=CONCLUSOES[codigo], interpretacao=texto)
     return resultado
+
+
+def zona_buffer(falhas: Sequence[Dict], bbox: Dict, km: float) -> Optional[Dict]:
+    """Área a até `km` das falhas, recortada à área de estudo, como geometria GeoJSON.
+
+    Calculada na mesma projeção da análise, para coincidir com os buffers dela.
+    """
+    if not falhas:
+        return None
+    projetor = _projetor(bbox)
+    inverso = Transformer.from_crs(proj_local(bbox), "EPSG:4326", always_xy=True)
+    indice = IndiceFalhas(falhas, projetor)
+    zona = shapely.union_all(shapely.buffer(indice.geoms, km * 1000, quad_segs=8))
+
+    # Recorte: caixa de estudo densificada (as bordas viram curvas na projeção)
+    lons = np.concatenate([np.linspace(bbox["oeste"], bbox["leste"], 50), np.full(50, bbox["leste"]),
+                           np.linspace(bbox["leste"], bbox["oeste"], 50), np.full(50, bbox["oeste"])])
+    lats = np.concatenate([np.full(50, bbox["sul"]), np.linspace(bbox["sul"], bbox["norte"], 50),
+                           np.full(50, bbox["norte"]), np.linspace(bbox["norte"], bbox["sul"], 50)])
+    cx, cy = projetor.transform(lons, lats)
+    area = shapely.polygons(np.column_stack([cx, cy]))
+    zona = shapely.intersection(zona, area)
+    zona = shapely.simplify(zona, tolerance=max(50.0, km * 20))  # metros; reduz o tamanho
+    if zona.is_empty:
+        return None
+
+    def para_graus(coords):
+        x, y = inverso.transform(coords[:, 0], coords[:, 1])
+        return np.column_stack([np.round(x, 5), np.round(y, 5)])
+
+    return shapely.geometry.mapping(shapely.transform(zona, para_graus))
 
 
 def _br(valor: float, casas: int = 1) -> str:
@@ -304,7 +354,7 @@ def interpretar(r: Dict):
     """
     p = r["teste_mediana"]["p_valor"]
     obs, ale = r["distancias"]["mediana_km"], r["aleatorio"]["mediana_km"]
-    excesso = [b for b in r["buffers"] if b["p_valor"] < ALFA and (b["razao"] or 0) > 1]
+    excesso = [b for b in r["buffers"] if b["p_ajustado"] < ALFA and (b["razao"] or 0) > 1]
     mediana_sig = p < ALFA and obs < ale
     forca = "fortemente significativa (p < 0,01)" if p < 0.01 else f"significativa (p = {_br(p, 3)})"
 
@@ -314,13 +364,13 @@ def interpretar(r: Dict):
         b = excesso[0]
         detalhe = (f"Dentro de {_br(b['km'], 0)} km de uma falha estão {_br(b['observado_pct'])}% dos epicentros, "
                    f"contra {_br(b['esperado_pct'])}% esperados ao acaso ({_br(b['razao'], 2)}× o esperado, "
-                   f"p = {_br(b['p_valor'], 3)}).")
+                   f"p ajustado = {_br(b['p_ajustado'], 3)}).")
     else:
         maior = r["buffers"][-1]
         detalhe = (f"Nenhum buffer tem mais eventos que o esperado: até {_br(maior['km'], 0)} km de uma falha "
                    f"estão {_br(maior['observado_pct'])}% dos epicentros, contra {_br(maior['esperado_pct'])}% ao acaso.")
 
-    if obs > ale and not excesso:
+    if r["teste_mediana"].get("p_afastamento", 1) < ALFA and not excesso:
         codigo = "afastamento"
         meio = "Os epicentros estão, em geral, mais LONGE das falhas do que o acaso explicaria."
     elif mediana_sig and excesso:

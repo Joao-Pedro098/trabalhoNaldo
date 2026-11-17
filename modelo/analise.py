@@ -89,6 +89,16 @@ class AnaliseModelo:
         return novo_id
 
     @staticmethod
+    def zona_buffer(analise_id: int, km: float) -> Optional[Dict]:
+        """Zona a até `km` das falhas usadas na análise (com as falhas atuais do banco)."""
+        analise = AnaliseModelo.obter(analise_id)
+        if analise is None:
+            return None
+        p = analise["parametros"]
+        falhas = FalhaModelo.para_analise(expandir_bbox(p["bbox"], max(p["buffers_km"])), p.get("fontes_falhas"))
+        return {"km": km, "geometria": correlacao.zona_buffer(falhas, p["bbox"], km)}
+
+    @staticmethod
     def obter(analise_id: int) -> Optional[Dict]:
         conn = get_db_connection()
         cursor = conn.cursor()

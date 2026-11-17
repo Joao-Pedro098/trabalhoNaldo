@@ -93,6 +93,11 @@ def obter_analise(analise_id):
     return AnaliseControle.obter(analise_id)
 
 
+@rotas_bp.route("/api/analises/<int:analise_id>/buffer", methods=["GET"])
+def zona_buffer_analise(analise_id):
+    return AnaliseControle.zona_buffer(analise_id)
+
+
 # ---- Análises salvas (preenchidas a partir da Fase 5) ----
 @rotas_bp.route("/api/analises", methods=["GET"])
 def listar_analises():

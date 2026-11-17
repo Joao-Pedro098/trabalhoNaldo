@@ -162,11 +162,97 @@
 
             <!-- VIEW: Análise -->
             <section class="panel-view hidden" id="view-analise">
-                <h2 class="section-title">Análise de correlação</h2>
-                <div class="empty-state-box">
-                    <i class="fa-solid fa-chart-column"></i>
-                    <p>Importe epicentros e falhas para rodar a análise.</p>
-                    <small>Distância à falha mais próxima, buffer e teste de Monte Carlo.</small>
+                <h2 class="section-title">Nova análise</h2>
+                <form class="form-card" id="form-analise">
+                    <div class="form-area">
+                        <i class="fa-regular fa-square"></i>
+                        <div>
+                            <strong>Área de estudo: área visível do mapa</strong>
+                            <small id="bbox-analise-texto">--</small>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <label>Profundidade máxima
+                            <select id="an-prof">
+                                <option value="">Todas</option>
+                                <option value="35" selected>Até 35 km (crustal rasa)</option>
+                                <option value="70">Até 70 km</option>
+                            </select>
+                        </label>
+                        <label>Magnitude mínima<input type="number" id="an-mag" min="-2" max="10" step="0.1" placeholder="Todas"></label>
+                    </div>
+                    <small class="form-hint"><i class="fa-solid fa-circle-info"></i> Falhas mapeadas são traços na superfície. Sismos profundos (ex.: em subducção) ocorrem longe do traço; por isso o padrão é analisar só os rasos.</small>
+                    <div class="form-row">
+                        <label>Buffers (km)<input type="text" id="an-buffers" value="5, 10, 20, 50"></label>
+                        <label>Simulações
+                            <select id="an-sims">
+                                <option value="99">99 (rápido)</option>
+                                <option value="499">499</option>
+                                <option value="999" selected>999</option>
+                                <option value="4999">4.999 (preciso)</option>
+                            </select>
+                        </label>
+                    </div>
+                    <details class="mais-opcoes">
+                        <summary>Mais opções</summary>
+                        <div class="form-row">
+                            <label>Início<input type="date" id="an-inicio"></label>
+                            <label>Fim<input type="date" id="an-fim"></label>
+                        </div>
+                        <div class="form-row">
+                            <label>Nome da análise<input type="text" id="an-nome" maxlength="120" placeholder="Gerado automaticamente"></label>
+                        </div>
+                        <fieldset class="fontes-check" id="an-fontes">
+                            <legend>Fontes de falhas</legend>
+                            <small class="form-hint">Nenhuma falha importada.</small>
+                        </fieldset>
+                    </details>
+                    <button type="submit" class="btn-primary" id="btn-analisar">
+                        <i class="fa-solid fa-play"></i> Rodar análise
+                    </button>
+                </form>
+
+                <!-- Resultado -->
+                <div id="resultado-analise" class="hidden">
+                    <div class="resultado-topo">
+                        <h2 class="section-title" id="res-nome">Resultado</h2>
+                        <button type="button" class="btn-link" id="btn-limpar-analise" title="Remover a análise do mapa">
+                            <i class="fa-solid fa-xmark"></i> Fechar
+                        </button>
+                    </div>
+
+                    <div class="conclusao-card" id="res-conclusao">
+                        <div class="conclusao-titulo"><i id="res-icone"></i> <strong id="res-titulo"></strong></div>
+                        <p id="res-texto"></p>
+                    </div>
+
+                    <div class="stat-grid stat-grid-3">
+                        <div class="stat-mini"><span class="stat-mini-label">Mediana observada</span><span class="stat-mini-valor" id="res-med-obs"></span></div>
+                        <div class="stat-mini"><span class="stat-mini-label">Mediana ao acaso</span><span class="stat-mini-valor" id="res-med-ale"></span></div>
+                        <div class="stat-mini"><span class="stat-mini-label">p-valor</span><span class="stat-mini-valor" id="res-p"></span></div>
+                    </div>
+                    <p class="res-meta" id="res-meta"></p>
+                    <ul class="avisos hidden" id="res-avisos"></ul>
+
+                    <h3 class="sub-title">Eventos perto das falhas</h3>
+                    <small class="form-hint">Clique numa linha para ver a zona no mapa.</small>
+                    <table class="tabela" id="res-buffers">
+                        <thead><tr><th>Até</th><th>Observado</th><th>Esperado</th><th>Razão</th><th title="p-valor com correção de Bonferroni pelo número de buffers">p ajust.</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+
+                    <h3 class="sub-title">Distribuição das distâncias</h3>
+                    <div class="grafico-box"><canvas id="grafico-hist" role="img" aria-label="Histograma das distâncias epicentro–falha, observado e esperado ao acaso"></canvas></div>
+
+                    <h3 class="sub-title">Falhas com mais eventos</h3>
+                    <small class="form-hint" id="res-ranking-hint">Eventos atribuídos à falha mais próxima, até o maior buffer. Clique para ver no mapa.</small>
+                    <table class="tabela tabela-ranking" id="res-ranking">
+                        <thead><tr><th>Falha</th><th>Eventos</th><th>M máx</th><th>/100 km</th></tr></thead>
+                        <tbody></tbody>
+                    </table>
+
+                    <h3 class="sub-title">Outros testes</h3>
+                    <dl class="outros-testes" id="res-outros"></dl>
                 </div>
             </section>
 
@@ -210,6 +296,13 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
             integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"
+            integrity="sha512-KhIBJeCI4oTEeqOmRi2gDJ7m+JARImhUYgXWiOTIp9qqySpFUAJs09erGKem4E5IPuxxSTjavuurvBitBmwE0w=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"
+            integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw=="
+            crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/analise.js') }}"></script>
 </body>
 </html>

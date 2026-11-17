@@ -67,6 +67,19 @@ def test_eventos_longe_da_falha_nao_indicam_associacao():
     r = analisar(epis(zip(lon, lat)), [FALHA_CENTRAL], BBOX, n_simulacoes=499)
     assert r["teste_mediana"]["p_valor"] > 0.5
     assert r["conclusao"] == "afastamento" and "LONGE" in r["interpretacao"]
+    assert r["teste_mediana"]["p_afastamento"] < 0.01
+
+
+def test_mediana_um_pouco_maior_nao_e_afastamento():
+    """Mediana observada levemente acima da aleatória, sem significância: 'sem associação'."""
+    for semente in range(40):
+        r = analisar(aleatorios(50, 2000 + semente), [FALHA_CENTRAL], BBOX, n_simulacoes=199, semente=semente)
+        sem_excesso = all(b["p_ajustado"] >= 0.05 for b in r["buffers"])
+        if (r["distancias"]["mediana_km"] > r["aleatorio"]["mediana_km"]
+                and r["teste_mediana"]["p_afastamento"] >= 0.05 and sem_excesso):
+            assert r["conclusao"] == "sem_associacao"
+            return
+    pytest.fail("nenhum caso de mediana levemente maior encontrado")
 
 
 def test_proximidade_sem_excesso_tipo_subducao():
@@ -194,3 +207,59 @@ def test_api_analise_erros(cliente, monkeypatch):
     resp = cliente.post("/api/analise", json={"bbox": bbox})  # banco vazio
     assert resp.status_code == 422 and "pelo menos 10" in resp.get_json()["erro"]
     assert cliente.get("/api/analises/999").status_code == 404
+
+
+# ---------------- Fase 4: zona de buffer e limites ----------------
+
+def test_zona_buffer_contem_pontos_certos():
+    import shapely.geometry as sg
+    geom = correlacao.zona_buffer([FALHA_CENTRAL], BBOX, 10)
+    zona = sg.shape(geom)
+    km = 1 / 111.32  # graus por km no equador
+    assert zona.contains(sg.Point(5 * km, 0.0))       # 5 km da falha
+    assert not zona.contains(sg.Point(15 * km, 0.0))  # 15 km da falha
+    assert zona.contains(sg.Point(0.0, 1.5 + 5 * km))  # ponta arredondada
+    assert correlacao.zona_buffer([], BBOX, 10) is None
+
+
+def test_zona_buffer_recortada_na_area():
+    import shapely.geometry as sg
+    longa = dict(FALHA_CENTRAL, geometria={"type": "LineString", "coordinates": [[0.0, -5.0], [0.0, 5.0]]})
+    minx, miny, maxx, maxy = sg.shape(correlacao.zona_buffer([longa], BBOX, 10)).bounds
+    assert miny >= -2.0 - 1e-3 and maxy <= 2.0 + 1e-3
+
+
+def test_ranking_tem_limites_da_falha():
+    dados = epis([(0.01, y) for y in np.linspace(-1, 1, 12)])
+    r = analisar(dados, [FALHA_CENTRAL], BBOX, n_simulacoes=99)
+    assert r["ranking_falhas"][0]["limites"] == [[-1.5, 0.0], [1.5, 0.0]]
+
+
+def test_api_zona_buffer(cliente, monkeypatch):
+    _popular(cliente, monkeypatch)
+    r = cliente.post("/api/analise", json={"bbox": {"sul": -1.1, "oeste": 0.0, "norte": 1.1, "leste": 1.0},
+                                           "n_simulacoes": 99}).get_json()["resultado"]
+    zona = cliente.get(f"/api/analises/{r['id']}/buffer?km=10").get_json()
+    assert zona["km"] == 10 and zona["geometria"]["type"] in ("Polygon", "MultiPolygon")
+    assert cliente.get(f"/api/analises/{r['id']}/buffer").status_code == 400
+    assert cliente.get("/api/analises/999/buffer?km=5").status_code == 404
+
+
+def test_excesso_local_com_correcao_de_bonferroni():
+    """Com dados aleatórios, a conclusão 'excesso_local' deve ser rara (~5%), mesmo testando 4 buffers."""
+    falsos = 0
+    for semente in range(40):
+        r = analisar(aleatorios(50, 3000 + semente), [FALHA_CENTRAL], BBOX, n_simulacoes=199, semente=semente)
+        falsos += r["conclusao"] in ("excesso_local", "associacao")
+        for b in r["buffers"]:
+            assert b["p_ajustado"] == pytest.approx(min(1, b["p_valor"] * 4), abs=1e-3)
+    assert falsos <= 6
+
+
+def test_aviso_de_cobertura():
+    # eventos concentrados num canto da área
+    cantinho = epis([(1.5 + 0.01 * i, 1.5 + 0.01 * (i % 5)) for i in range(20)])
+    r = analisar(cantinho, [FALHA_CENTRAL], BBOX, n_simulacoes=99)
+    assert any("ocupam só" in a for a in r["avisos"])
+    r2 = analisar(aleatorios(60, 11), [FALHA_CENTRAL], BBOX, n_simulacoes=99)
+    assert not any("ocupam só" in a for a in r2["avisos"])

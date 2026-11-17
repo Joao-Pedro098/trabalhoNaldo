@@ -25,9 +25,20 @@ document.addEventListener('DOMContentLoaded', () => {
     map.createPane('falhas').style.zIndex = 450;
     const camadasDados = {
         'Epicentros': L.layerGroup().addTo(map),
-        'Falhas': L.layerGroup().addTo(map)
+        'Falhas': L.layerGroup().addTo(map),
+        // Densidade dos epicentros exibidos (peso pela magnitude); desligada por padrão
+        'Densidade (calor)': L.heatLayer([], { radius: 20, blur: 18, maxZoom: 9, minOpacity: 0.25 })
     };
     L.control.layers(camadasBase, camadasDados, { position: 'bottomright' }).addTo(map);
+
+    // Ganchos preenchidos por analise.js (mantém este arquivo independente da análise)
+    const ganchos = {
+        popupEpicentro: null,     // (e) => html extra no popup do epicentro
+        abrirEpicentro: null,     // (e) => chamado ao abrir o popup
+        fecharEpicentro: null,    // () => chamado ao fechar o popup
+        mostrarView: null,        // (nome) => chamado ao trocar de aba
+        abrirAnalise: null        // (id) => abre uma análise salva
+    };
 
     let marcadorLocal = null;
 
@@ -86,6 +97,7 @@ document.addEventListener('DOMContentLoaded', () => {
         viewButtons.forEach(b => b.classList.toggle('active', b.dataset.view === nome));
         if (nome === 'historico') carregarHistorico();
         if (nome === 'dados') carregarStatus();
+        ganchos.mostrarView?.(nome);
         toggleMobilePanel(false);
     }
     viewButtons.forEach(b => b.addEventListener('click', () => mostrarView(b.dataset.view)));
@@ -193,6 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <span>${escapeHtml(e.data_hora)} UTC</span>
                 <span>Profundidade: ${e.profundidade_km != null ? e.profundidade_km.toFixed(1) + ' km' : '?'} · ${escapeHtml(e.tipo_magnitude || '')}</span>
                 <span>${e.lat.toFixed(4)}, ${e.lon.toFixed(4)} · ${link}</span>
+                ${ganchos.popupEpicentro?.(e) || ''}
             </div></div>`;
     };
 
@@ -215,8 +228,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     radius: raioMagnitude(e.magnitude),
                     color: '#3c3c3c', weight: 0.6,
                     fillColor: corProfundidade(e.profundidade_km), fillOpacity: 0.8
-                }).bindPopup(() => popupEpicentro(e)).addTo(camada);
+                }).bindPopup(() => popupEpicentro(e))
+                  .on('popupopen', () => ganchos.abrirEpicentro?.(e))
+                  .on('popupclose', () => ganchos.fecharEpicentro?.())
+                  .addTo(camada);
             });
+            camadasDados['Densidade (calor)'].setLatLngs(data.epicentros.map(e =>
+                [e.lat, e.lon, Math.max(0.15, Math.min(1, ((e.magnitude ?? 2) - 1) / 6))]));
             const n = data.epicentros.length;
             $('exibindo-texto').textContent = data.total === 0
                 ? 'Nenhum epicentro na área visível.'
@@ -404,9 +422,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    const AREA_GRANDE_GRAUS = 20;
     $('btn-importar-gem').addEventListener('click', () => {
         const bbox = bboxVisivel();
         if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }
+        const largura = Math.max(bbox.norte - bbox.sul, bbox.leste - bbox.oeste);
+        if (largura > AREA_GRANDE_GRAUS && !confirm(
+            `A área visível é muito grande (${Math.round(largura)}° de largura) e pode trazer milhares de falhas. ` +
+            'Importar mesmo assim?')) return;
         comCarregamento($('btn-importar-gem'), 'Buscando no GEM...', async () => {
             const data = await api('/api/falhas/importar-gem', {
                 method: 'POST',
@@ -594,10 +617,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             lista.innerHTML = itens.map(a => `
-                <div class="history-item">
+                <div class="history-item" data-id="${a.id}" role="button" tabindex="0">
                     <div class="history-item-route">${escapeHtml(a.nome || `Análise #${a.id}`)}</div>
                     <div class="history-item-meta"><span>#${a.id}</span><span>${escapeHtml(a.criado_em.split(' ')[0])}</span></div>
                 </div>`).join('');
+            lista.querySelectorAll('.history-item').forEach(el => {
+                const abrir = () => ganchos.abrirAnalise?.(Number(el.dataset.id));
+                el.addEventListener('click', abrir);
+                el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') abrir(); });
+            });
         } catch (e) {
             showAlert(e.message);
         }
@@ -629,6 +657,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // INICIALIZAÇÃO
     // ==========================================
+    window.SF = {
+        map, api, showAlert, escapeHtml, bboxVisivel, bboxValido, mostrarView,
+        areaCobertaPeloPainel, camadasDados, CATEGORIAS_FALHA, ganchos, carregarHistorico
+    };
+
     carregarStatus();
     atualizarTextoBbox();
     carregarEpicentros();

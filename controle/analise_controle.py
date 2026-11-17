@@ -67,6 +67,19 @@ class AnaliseControle:
         return resposta_sucesso({"resultado": resultado}, mensagem="Análise concluída.")
 
     @staticmethod
+    def zona_buffer(analise_id: int):
+        try:
+            km = _ler_numero(request.args.get("km"), "km", 0.1, 500)
+        except ErroValidacao as e:
+            return resposta_erro(str(e))
+        if km is None:
+            return resposta_erro("Informe 'km'.")
+        zona = AnaliseModelo.zona_buffer(analise_id, km)
+        if zona is None:
+            return resposta_erro("Análise não encontrada.", status=404)
+        return resposta_sucesso(zona)
+
+    @staticmethod
     def obter(analise_id: int):
         resultado = AnaliseModelo.obter(analise_id)
         if resultado is None:
