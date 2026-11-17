@@ -53,7 +53,6 @@ Requisitos: Python 3.10+. PostgreSQL é opcional (sem ele, o sistema usa SQLite 
 - **Erro de localização:** epicentros brasileiros costumam ter incerteza de 5–10 km ou mais (rede esparsa); os históricos, dezenas de km. Isso é da ordem do buffer de 5 km — prefira eventos recentes (*Mais opções → Início*) para confirmar.
 - **Vieses de amostragem:** a rede é mais densa no Sudeste e áreas mais habitadas registram mais sismos; algumas regiões foram mais mapeadas geologicamente que outras. Os dois podem se combinar e produzir correlação aparente. Repetir a análise por estado ajuda a separar.
 - **Profundidade:** a maioria dos sismos brasileiros tem profundidade não determinada (vazia ou 0); por padrão eles são tratados como rasos.
-- **Escala da projeção:** com o Brasil inteiro as distâncias perto das bordas ficam até ~4% maiores (o sistema informa o valor exato).
 
 ## 🧭 Como usar (passo a passo)
 
@@ -76,10 +75,21 @@ Coquimbo, Chile — 984 sismos M ≥ 2,5 (2016–2026), 13 falhas do GEM, sismos
 
 ---
 
+## 🌍 Mundo inteiro (Fase 8)
+
+1. **Dados → marque "Mundo inteiro" → USGS, M ≥ 5, desde 1973** (~90 mil eventos; acima de 20 mil a importação é dividida em lotes automaticamente; ~45 s). Depois **Importar falhas do GEM** com "Mundo inteiro".
+2. **Análise → Mundo inteiro**, escolha o **catálogo de sismos** (um por análise: o mesmo sismo pode estar na USGS e na USP com ids diferentes).
+3. Opcional: **"Só sismicidade intraplaca"** descarta sismos a menos de X km (padrão 200) de limites de placa (subducção, dorsais, transformantes) e sorteia o acaso só longe deles.
+4. O resultado inclui a tabela **Por tipo de falha** (dorsal, transcorrente, reversa, normal...).
+
+**Resultado real** (USGS M ≥ 5, 1973–2026, sismos ≤ 35 km, GEM): 56.262 sismos; 21,4% a até 10 km de uma falha contra 2,5% ao acaso (8,7×). Por tipo: dorsais 15,5×, transcorrentes 10,6×, reversas 7,8×, normais 4,3×. Intraplaca (> 200 km dos limites): 9.211 sismos, 33,1% × 1,7% (19×).
+
+**Cuidados:** no mundo inteiro a associação é quase óbvia (30% das falhas do GEM são limites de placa) — compare tipos e regiões. "Intraplaca" aqui é *longe dos limites de placa*, mas as falhas restantes do GEM ainda são zonas ativas (Himalaia, Irã, China), não interiores estáveis como o Brasil. O acaso uniforme inclui oceanos, onde há menos falhas mapeadas. Com mais de 20 mil sismos, a lista por epicentro não vai ao navegador (o popup busca um evento por vez; a exportação é completa) e a zona de buffer é desenhada só para a região visível.
+
 ## 📐 Metodologia
 
-1. **Projeção:** azimutal equidistante centrada na área de estudo — distâncias em km com pouca distorção em escala regional (aviso acima de 2.500 km).
-2. **Distância observada:** de cada epicentro até a falha mais próxima (índice espacial STRtree). Falhas logo *fora* da área também contam.
+1. **Distâncias geodésicas (Fase 8):** medidas sobre a esfera (raio médio 6.371 km): falhas densificadas a cada 1 km, vetores 3D numa KD-tree e distância exata ponto–arco de grande círculo. Valem de uma região ao mundo inteiro, inclusive nos polos e na longitude 180° (diferença para o elipsoide ≤ 0,5%, verificada contra o pyproj).
+2. **Distância observada:** de cada epicentro até a falha mais próxima. Falhas logo *fora* da área também contam.
 3. **Hipótese nula:** epicentros distribuídos uniformemente (na esfera) dentro da área de estudo.
 4. **Monte Carlo** (padrão 999 catálogos aleatórios do mesmo tamanho; semente fixa):
    - **Mediana:** p = (1 + nº de simulações com mediana ≤ observada) / (n + 1).
@@ -168,7 +178,7 @@ sismoFalhas/
 │   ├── vendor/                  # Bibliotecas locais (offline)
 │   └── data/                    # Contornos dos países (mapa offline) e das UFs (IBGE)
 ├── data/demo/                   # Dados de demonstração + LEIA-ME
-├── tests/                       # 90 testes (pytest)
+├── tests/                       # 110 testes (pytest)
 ├── app.py                       # Ponto de entrada (porta 5000)
 ├── carregar_demo.py             # Carrega a demonstração pela linha de comando
 └── setup_vm.sh                  # Instalação no Ubuntu Server (--demo, --servico)
@@ -198,7 +208,7 @@ sismoFalhas/
 | GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas (GeoJSON) |
 | GET | `/api/analises/<id>/exportar?formato=` | `csv`, `geojson` ou `json` (download) |
 
-**`POST /api/analise`:** `bbox` ou `territorio` (`"BR"` ou sigla da UF — a hipótese nula fica dentro do polígono), `incluir_sem_profundidade` (padrão `true`), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
+**`POST /api/analise`:** `bbox` ou `territorio` (`"BR"` ou sigla da UF — a hipótese nula fica dentro do polígono), `incluir_sem_profundidade` (padrão `true`), `fontes_epicentros` (ex.: `["USP"]`), `intraplaca_km`, `area` (`"mundo"`, ou (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
 
 ## ⚙️ Configuração (variáveis de ambiente, opcionais)
 
@@ -236,3 +246,4 @@ python -m pytest -q
 | 5 | Registro de importações, área importada, exportação | ✅ |
 | 6 | Funcionamento offline, demonstração, instalação e documentação | ✅ |
 | 7 | Brasil inteiro: catálogo da USP, estruturas do SGB, território/UF como área de estudo | ✅ |
+| 8 | Mundo inteiro: distâncias geodésicas, importação em lotes, catálogo único, intraplaca, por tipo de falha | ✅ |

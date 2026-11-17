@@ -116,6 +116,7 @@
                             <small id="bbox-texto">--</small>
                         </div>
                     </div>
+                    <label class="check-linha"><input type="checkbox" id="imp-mundo"> Mundo inteiro (vale também para GEM e SGB). Na USGS, use M ≥ 5: acima de 20 mil eventos a importação é feita em lotes.</label>
                     <div class="form-row">
                         <label>Início<input type="date" id="imp-inicio" required></label>
                         <label>Fim<input type="date" id="imp-fim" required></label>
@@ -210,10 +211,22 @@
                             </span>
                         </label>
                         <label class="area-opcao">
+                            <input type="radio" name="an-area" value="mundo">
+                            <span><strong>Mundo inteiro</strong><small>Distâncias geodésicas (na esfera), corretas em qualquer escala</small></span>
+                        </label>
+                        <label class="area-opcao">
                             <input type="radio" name="an-area" value="visivel">
                             <span><strong>Área visível do mapa</strong><small id="bbox-analise-texto">--</small></span>
                         </label>
                     </div>
+                    <div class="form-row">
+                        <label>Catálogo de sismos
+                            <select id="an-catalogo"><option value="">Carregando...</option></select>
+                        </label>
+                    </div>
+                    <small class="form-hint"><i class="fa-solid fa-circle-info"></i> Um catálogo por análise: o mesmo sismo pode estar em dois catálogos com ids diferentes.</small>
+                    <label class="check-linha"><input type="checkbox" id="an-intraplaca"> Só sismicidade intraplaca: descartar sismos a menos de
+                        <input type="number" id="an-intraplaca-km" value="200" min="1" max="2000" step="10" class="input-curto"> km de limites de placa (subducção, dorsais, transformantes)</label>
                     <div class="form-row">
                         <label>Profundidade máxima
                             <select id="an-prof">
@@ -301,6 +314,15 @@
                         <thead><tr><th>Falha</th><th>Eventos</th><th>M máx</th><th>/100 km</th></tr></thead>
                         <tbody></tbody>
                     </table>
+
+                    <div id="res-categorias-box" class="hidden">
+                        <h3 class="sub-title">Por tipo de falha</h3>
+                        <small class="form-hint" id="res-categorias-hint"></small>
+                        <table class="tabela" id="res-categorias">
+                            <thead><tr><th>Tipo</th><th>Falhas</th><th>Observado</th><th>Esperado</th><th>Razão</th><th>p ajust.</th></tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
 
                     <h3 class="sub-title">Outros testes</h3>
                     <dl class="outros-testes" id="res-outros"></dl>

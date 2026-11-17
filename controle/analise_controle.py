@@ -3,7 +3,7 @@ from flask import Response, request
 from controle.epicentros_controle import ErroValidacao, ler_bbox, ler_data, ler_magnitude
 from controle.respostas import resposta_erro, resposta_sucesso
 from modelo import exportacao, territorio as territorios
-from modelo.analise import AnaliseModelo
+from modelo.analise import LIMITE_POR_EPICENTRO_NA_RESPOSTA, AnaliseModelo
 from modelo.correlacao import ErroAnalise
 from modelo.importacao import ImportacaoModelo
 from modelo.sistema import SistemaModelo
@@ -43,6 +43,9 @@ class AnaliseControle:
     def executar():
         dados = request.get_json(silent=True) or {}
         try:
+            fontes_epi = dados.get("fontes_epicentros") or None
+            if fontes_epi is not None and not (isinstance(fontes_epi, list) and all(isinstance(f, str) for f in fontes_epi)):
+                raise ErroValidacao("'fontes_epicentros' deve ser uma lista de catálogos (ex.: [\"USP\"]).")
             territorio = (dados.get("territorio") or "").strip().upper() or None
             if territorio:
                 try:
@@ -52,9 +55,11 @@ class AnaliseControle:
                 bbox = territorios.bbox(territorio)  # a caixa vem do território
             else:
                 bbox = ler_bbox(dados.get("bbox") or {})
+            if dados.get("area") == "mundo" and not territorio:
+                bbox = {"sul": -90.0, "oeste": -180.0, "norte": 90.0, "leste": 180.0}
             if dados.get("area") == "importada" and not territorio:
                 # Área exata das importações de sismos que cruzam a área visível
-                bbox = ImportacaoModelo.area_importada("epicentros", bbox)
+                bbox = ImportacaoModelo.area_importada("epicentros", bbox, fontes_epi)
                 if bbox is None:
                     raise ErroValidacao("Nenhuma importação de sismos registrada nesta região. "
                                         "Importe sismos ou use a área visível.")
@@ -74,6 +79,8 @@ class AnaliseControle:
                 "nome": (dados.get("nome") or "").strip()[:120] or None,
                 "salvar": dados.get("salvar", True) is not False,
                 "territorio": territorio,
+                "fontes_epicentros": fontes_epi,
+                "intraplaca_km": _ler_numero(dados.get("intraplaca_km"), "intraplaca_km", 1, 2000),
                 "incluir_sem_profundidade": dados.get("incluir_sem_profundidade", True) is not False,
             }
         except ErroValidacao as e:
@@ -83,6 +90,10 @@ class AnaliseControle:
             resultado = AnaliseModelo.executar(**parametros)
         except ErroAnalise as e:
             return resposta_erro(str(e), status=422)
+        n = len(resultado.get("por_epicentro") or [])
+        if n > LIMITE_POR_EPICENTRO_NA_RESPOSTA and resultado.get("id"):
+            # Lista completa fica salva (exportação); o popup busca um evento por vez
+            resultado = {**resultado, "por_epicentro": [], "por_epicentro_omitido": n}
         return resposta_sucesso({"resultado": resultado}, mensagem="Análise concluída.")
 
     @staticmethod
@@ -93,7 +104,13 @@ class AnaliseControle:
             return resposta_erro(str(e))
         if km is None:
             return resposta_erro("Informe 'km'.")
-        zona = AnaliseModelo.zona_buffer(analise_id, km)
+        vista = None
+        if request.args.get("sul") is not None:
+            try:
+                vista = ler_bbox(request.args)
+            except ErroValidacao as e:
+                return resposta_erro(str(e))
+        zona = AnaliseModelo.zona_buffer(analise_id, km, vista)
         if zona is None:
             return resposta_erro("Análise não encontrada.", status=404)
         return resposta_sucesso(zona)
@@ -120,6 +137,7 @@ class AnaliseControle:
     def apagar(analise_id: int):
         if not SistemaModelo.apagar_analise(analise_id):
             return resposta_erro("Análise não encontrada.", status=404)
+        AnaliseModelo.esquecer(analise_id)
         return resposta_sucesso(mensagem="Análise apagada.")
 
     @staticmethod
@@ -140,8 +158,15 @@ class AnaliseControle:
         return resposta_sucesso({"importacoes": ImportacaoModelo.listar(tipo)})
 
     @staticmethod
+    def epicentro(analise_id: int, epicentro_id: str):
+        info = AnaliseModelo.epicentro(analise_id, epicentro_id)
+        if info is None:
+            return resposta_erro("Epicentro não faz parte desta análise.", status=404)
+        return resposta_sucesso({"epicentro": info})
+
+    @staticmethod
     def obter(analise_id: int):
-        resultado = AnaliseModelo.obter(analise_id)
+        resultado = AnaliseModelo.obter_para_interface(analise_id)
         if resultado is None:
             return resposta_erro("Análise não encontrada.", status=404)
         return resposta_sucesso({"resultado": resultado})

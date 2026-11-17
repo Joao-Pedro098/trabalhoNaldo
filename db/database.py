@@ -147,6 +147,21 @@ def _ddl(backend: str):
     ]
 
 
+def _colunas(cursor, tabela: str) -> set:
+    if is_using_postgres():
+        cursor.execute("SELECT column_name AS nome FROM information_schema.columns WHERE table_name = %s", (tabela,))
+        return {(l["nome"] if hasattr(l, "keys") else l[0]) for l in cursor.fetchall()}
+    cursor.execute(f"PRAGMA table_info({tabela})")
+    return {l[1] for l in cursor.fetchall()}
+
+
+def _migrar(cursor) -> None:
+    """Ajustes em bancos criados por versões anteriores (CREATE TABLE IF NOT EXISTS não altera tabelas)."""
+    if "resumo_json" not in _colunas(cursor, "analises"):
+        # Resumo pequeno da análise: o histórico não precisa abrir resultados de vários MB
+        cursor.execute("ALTER TABLE analises ADD COLUMN resumo_json TEXT")
+
+
 def init_db():
     """Escolhe o backend e cria as tabelas se não existirem."""
     global _BACKEND
@@ -156,6 +171,7 @@ def init_db():
     cursor = conn.cursor()
     for comando in _ddl(_BACKEND):
         cursor.execute(comando)
+    _migrar(cursor)
     conn.commit()
     conn.close()
 

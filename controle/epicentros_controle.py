@@ -71,14 +71,16 @@ class EpicentrosControle:
             return EpicentrosControle._importar_usp(bbox, inicio, fim, min_mag)
 
         total = usgs.contar(bbox, inicio, fim, min_mag)
-        if total is not None and total > usgs.LIMITE_USGS:
-            return resposta_erro(
-                f"A consulta retornaria {total:,} eventos (limite da USGS: {usgs.LIMITE_USGS:,}). "
-                "Aumente a magnitude mínima, reduza o período ou a área.".replace(",", ".")
-            )
-
         try:
-            registros = usgs.buscar(bbox, inicio, fim, min_mag)
+            if total is not None and total > usgs.LIMITE_USGS:
+                # Acima do limite da USGS: divide o período em lotes automaticamente
+                if total > usgs.LIMITE_TOTAL:
+                    return resposta_erro(
+                        f"A consulta retornaria {total:,} eventos (teto de {usgs.LIMITE_TOTAL:,} por importação). "
+                        "Aumente a magnitude mínima, reduza o período ou a área.".replace(",", "."))
+                registros = usgs.buscar_em_lotes(bbox, inicio, fim, min_mag)
+            else:
+                registros = usgs.buscar(bbox, inicio, fim, min_mag)
         except usgs.ErroFonte as e:
             return resposta_erro(str(e), status=502)
 
@@ -134,6 +136,16 @@ class EpicentrosControle:
         dentro = shapely.contains_xy(poligono, [e["lon"] for e in eps], [e["lat"] for e in eps]) if eps else []
         eps = [e for e, d in zip(eps, dentro) if d]
         return resposta_sucesso({"total": len(eps), "epicentros": eps[:limite]})
+
+    @staticmethod
+    def fontes():
+        bbox = None
+        if request.args.get("sul") is not None:
+            try:
+                bbox = ler_bbox(request.args)
+            except ErroValidacao as e:
+                return resposta_erro(str(e))
+        return resposta_sucesso({"fontes": EpicentroModelo.fontes(bbox)})
 
     @staticmethod
     def resumo():

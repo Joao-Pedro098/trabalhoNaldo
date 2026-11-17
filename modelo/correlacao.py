@@ -25,6 +25,8 @@ import shapely.geometry
 from pyproj import Transformer
 from scipy import stats
 
+from modelo.geodesia import IndiceGeodesico, distancia_haversine_km
+
 RAIO_TERRA_KM = 6371.0088
 EXTENSAO_MAX_RECOMENDADA_KM = 2500  # acima disso a projeção local distorce mais
 TAMANHO_POOL_ALEATORIO = 200_000
@@ -55,25 +57,42 @@ def area_bbox_km2(bbox: Dict) -> float:
     return RAIO_TERRA_KM ** 2 * dlon * (math.sin(math.radians(bbox["norte"])) - math.sin(math.radians(bbox["sul"])))
 
 
-def pontos_aleatorios(bbox: Dict, n: int, rng: np.random.Generator, poligono=None):
+def pontos_aleatorios(bbox: Dict, n: int, rng: np.random.Generator, poligono=None, aceitar=None):
     """n pontos uniformes na esfera dentro da caixa (lon, lat em graus).
 
     Com `poligono` (lon/lat), sorteia na caixa e descarta os pontos fora dele
     (amostragem por rejeição: continua uniforme, agora só dentro do território).
     """
     s1, s2 = math.sin(math.radians(bbox["sul"])), math.sin(math.radians(bbox["norte"]))
-    if poligono is None:
+    if poligono is None and aceitar is None:
         lon = rng.uniform(bbox["oeste"], bbox["leste"], n)
         lat = np.degrees(np.arcsin(rng.uniform(s1, s2, n)))
         return lon, lat
-    lons, lats, total = [], [], 0
+    lons, lats, total, tentativas = [], [], 0, 0
     while total < n:
         lote = max(1000, 2 * (n - total))
         lon = rng.uniform(bbox["oeste"], bbox["leste"], lote)
         lat = np.degrees(np.arcsin(rng.uniform(s1, s2, lote)))
-        dentro = shapely.contains_xy(poligono, lon, lat)
+        dentro = np.ones(lote, dtype=bool)
+        if poligono is not None:
+            dentro &= shapely.contains_xy(poligono, lon, lat)
+        if aceitar is not None:
+            dentro &= aceitar(lon, lat)
         lons.append(lon[dentro]); lats.append(lat[dentro]); total += int(dentro.sum())
+        tentativas += lote
+        if tentativas > 200 * n and total < n:
+            raise ErroAnalise("A área de estudo que sobra (após os filtros) é pequena demais para sortear pontos.")
     return np.concatenate(lons)[:n], np.concatenate(lats)[:n]
+
+
+def extensao_bbox_km(bbox: Dict) -> float:
+    """Maior dimensão da caixa medida na esfera (largura no paralelo central ou altura)."""
+    lat_c = (bbox["sul"] + bbox["norte"]) / 2
+    largura = float(distancia_haversine_km(bbox["oeste"], lat_c, bbox["oeste"] + min(bbox["leste"] - bbox["oeste"], 180), lat_c)[0])
+    if bbox["leste"] - bbox["oeste"] > 180:
+        largura *= (bbox["leste"] - bbox["oeste"]) / 180
+    altura = RAIO_TERRA_KM * math.radians(bbox["norte"] - bbox["sul"])
+    return max(largura, altura)
 
 
 def area_poligono_km2(poligono) -> float:
@@ -159,7 +178,8 @@ class IndiceFalhas:
 def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
              buffers_km: Sequence[float] = (5, 10, 20, 50), n_simulacoes: int = 999,
              semente: int = 42, cobertura_importada: Optional[float] = None,
-             poligono=None) -> Dict:
+             poligono=None, aceitar=None, intraplaca_km: Optional[float] = None,
+             comparar_categorias: bool = True) -> Dict:
     """Roda a análise completa.
 
     epicentros: [{id, lat, lon, magnitude, profundidade_km}, ...] (dentro da área)
@@ -169,9 +189,36 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
                          None quando desconhecida -> usa uma estimativa pela extensão dos eventos.
     poligono:   território de estudo (shapely, lon/lat). Quando dado, a hipótese nula sorteia
                 pontos só dentro dele e `bbox` deve ser a caixa que o envolve.
+    aceitar:    função (lon, lat) -> máscara booleana que restringe ainda mais onde a hipótese nula
+                pode sortear (ex.: só longe dos limites de placa, na análise intraplaca).
+    intraplaca_km: se dado, descarta epicentros a menos dessa distância de um LIMITE DE PLACA
+                (subducção, dorsal, transformante), tira essas falhas da análise e sorteia a
+                hipótese nula só na área que sobra. Testa a sismicidade intraplaca.
+    comparar_categorias: calcula também a associação por tipo de falha (normal, reversa...).
     """
+    avisos_previos = []
+    n_excluidos_intraplaca = None
+    if intraplaca_km:
+        limites_placa = [f for f in falhas if eh_limite_placa(f.get("tipo"))]
+        if not limites_placa:
+            avisos_previos.append("Nenhum limite de placa entre as falhas da área: o filtro intraplaca não teve efeito.")
+        else:
+            indice_limites = IndiceGeodesico(limites_placa)
+            d_lim = indice_limites.mais_proxima([e["lon"] for e in epicentros], [e["lat"] for e in epicentros])[0] \
+                if epicentros else np.array([])
+            manter = d_lim >= intraplaca_km
+            n_excluidos_intraplaca = int((~manter).sum())
+            epicentros = [e for e, m in zip(epicentros, manter) if m]
+            falhas = [f for f in falhas if not eh_limite_placa(f.get("tipo"))]
+            filtro_anterior = aceitar
+
+            def aceitar(lon, lat, _f=filtro_anterior):
+                ok = indice_limites.mais_proxima(lon, lat)[0] >= intraplaca_km
+                return ok & _f(lon, lat) if _f is not None else ok
+
     if len(epicentros) < 10:
-        raise ErroAnalise(f"São necessários pelo menos 10 epicentros na área (há {len(epicentros)}).")
+        extra = " depois de descartar os próximos a limites de placa" if n_excluidos_intraplaca else ""
+        raise ErroAnalise(f"São necessários pelo menos 10 epicentros na área{extra} (há {len(epicentros)}).")
     if not falhas:
         raise ErroAnalise("Não há falhas na área (nem num raio do maior buffer em volta dela).")
     buffers_km = sorted({float(b) for b in buffers_km})
@@ -181,29 +228,28 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         raise ErroAnalise("O número de simulações deve ficar entre 99 e 9999.")
 
     rng = np.random.default_rng(semente)
-    projetor = _projetor(bbox)
-    indice = IndiceFalhas(falhas, projetor)
-    projetor_inverso = Transformer.from_crs(proj_local(bbox), "EPSG:4326", always_xy=True)
+    # Distâncias geodésicas (na esfera): valem para uma região, um país ou o mundo inteiro
+    indice = IndiceGeodesico(falhas)
 
     # ---- observado
     lon = np.array([e["lon"] for e in epicentros], dtype=float)
     lat = np.array([e["lat"] for e in epicentros], dtype=float)
-    x, y = projetor.transform(lon, lat)
-    dist_obs, idx_parte, pontos = indice.mais_proxima(np.asarray(x), np.asarray(y))
+    dist_obs, dono, fim_lon, fim_lat = indice.mais_proxima(lon, lat)
     n = len(dist_obs)
 
     # ---- hipótese nula: pool de distâncias de pontos aleatórios na área
     tamanho_pool = int(min(max(n_simulacoes * n, 20_000), TAMANHO_POOL_ALEATORIO))
-    rlon, rlat = pontos_aleatorios(bbox, tamanho_pool, rng, poligono)
-    rx, ry = projetor.transform(rlon, rlat)
-    dist_pool, _, _ = indice.mais_proxima(np.asarray(rx), np.asarray(ry))
+    rlon, rlat = pontos_aleatorios(bbox, tamanho_pool, rng, poligono, aceitar)
+    dist_pool, _, _, _ = indice.mais_proxima(rlon, rlat)
 
     # ---- Monte Carlo (catálogos aleatórios reamostrados do pool, em lotes)
     medianas_sim = np.empty(n_simulacoes)
     fracoes_sim = np.empty((n_simulacoes, len(buffers_km)))
     limites = np.array(buffers_km)
-    for inicio in range(0, n_simulacoes, LOTE_SIMULACOES):
-        fim = min(inicio + LOTE_SIMULACOES, n_simulacoes)
+    # Lotes menores para catálogos grandes (ex.: 90 mil eventos do mundo) não estourarem a memória
+    lote = max(1, min(LOTE_SIMULACOES, int(2_000_000 // max(n, 1))))
+    for inicio in range(0, n_simulacoes, lote):
+        fim = min(inicio + lote, n_simulacoes)
         amostra = rng.choice(dist_pool, size=(fim - inicio, n), replace=True)
         medianas_sim[inicio:fim] = np.median(amostra, axis=1)
         fracoes_sim[inicio:fim] = (amostra[:, :, None] <= limites).mean(axis=1)
@@ -241,7 +287,6 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         spearman = {"rho": round(float(rho), 3), "p_valor": round(float(p_rho), 4), "n": int(validos.sum())}
 
     # ---- ranking das falhas (eventos atribuídos à mais próxima, até o maior buffer)
-    dono = indice.dono[idx_parte]
     raio = buffers_km[-1]
     info_falha = {f["id"]: f for f in falhas}
     ranking: Dict = {}
@@ -270,6 +315,36 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         })
     lista_ranking.sort(key=lambda r: (r["eventos"], r["energia_j"]), reverse=True)
 
+    # ---- comparação por tipo de falha (ex.: subducção x transformante x normal)
+    por_categoria = []
+    categorias = sorted({f.get("categoria") or "outra" for f in falhas})
+    if comparar_categorias and len(categorias) > 1:
+        km_ref = buffers_km[min(1, len(buffers_km) - 1)]  # 10 km no padrão
+        amostra_pool = rng.choice(len(rlon), size=min(len(rlon), 50_000), replace=False)
+        for cat in categorias:
+            subconjunto = [f for f in falhas if (f.get("categoria") or "outra") == cat]
+            idx_cat = IndiceGeodesico(subconjunto)
+            d_obs_cat = idx_cat.mais_proxima(lon, lat)[0]
+            d_pool_cat = idx_cat.mais_proxima(rlon[amostra_pool], rlat[amostra_pool])[0]
+            frac_obs = float(np.mean(d_obs_cat <= km_ref))
+            frac_esp = float(np.mean(d_pool_cat <= km_ref))
+            # Monte Carlo: catálogos aleatórios do mesmo tamanho, reamostrados do pool da categoria
+            sim = np.empty(n_simulacoes)
+            lote_c = max(1, min(LOTE_SIMULACOES, int(2_000_000 // max(n, 1))))
+            perto = d_pool_cat <= km_ref
+            for ini in range(0, n_simulacoes, lote_c):
+                fim_c = min(ini + lote_c, n_simulacoes)
+                sim[ini:fim_c] = rng.choice(perto, size=(fim_c - ini, n), replace=True).mean(axis=1)
+            p = (1 + int(np.sum(sim >= frac_obs))) / (n_simulacoes + 1)
+            por_categoria.append({
+                "categoria": cat, "n_falhas": len(subconjunto), "km": km_ref,
+                "observado_pct": round(100 * frac_obs, 1), "esperado_pct": round(100 * frac_esp, 1),
+                "razao": round(frac_obs / frac_esp, 2) if frac_esp > 0 else None,
+                "p_valor": round(p, 4), "p_ajustado": round(min(1.0, p * len(categorias)), 4),
+                "mediana_km": round(float(np.median(d_obs_cat)), 1),
+            })
+        por_categoria.sort(key=lambda c: (c["razao"] or 0), reverse=True)
+
     # ---- histograma observado x esperado
     # O último intervalo acumula tudo acima do teto (o painel o rotula como "≥")
     teto = max(buffers_km[-1], float(np.percentile(np.concatenate([dist_obs, dist_pool]), 99)))
@@ -279,9 +354,6 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     esperado_hist = pool_hist / len(dist_pool) * n
 
     # ---- por epicentro: distância e ponto mais próximo na falha (para desenhar)
-    linhas = shapely.shortest_line(pontos, indice.geoms[idx_parte])
-    fim_xy = shapely.get_coordinates(linhas)[1::2]
-    fim_lon, fim_lat = projetor_inverso.transform(fim_xy[:, 0], fim_xy[:, 1])
     por_epicentro = [
         {"id": epicentros[i].get("id"), "id_externo": epicentros[i].get("id_externo"),
          "data_hora": epicentros[i].get("data_hora"),
@@ -295,15 +367,16 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
 
     # ---- área, avisos e interpretação
     area_estudo_km2 = area_poligono_km2(poligono) if poligono is not None else area_bbox_km2(bbox)
-    cx, cy = projetor.transform([bbox["oeste"], bbox["leste"], bbox["oeste"]],
-                                [bbox["sul"], bbox["sul"], bbox["norte"]])
-    extensao_km = max(abs(cx[1] - cx[0]), abs(cy[2] - cy[0])) / 1000
-    avisos = []
-    erro_pct = erro_escala_pct(bbox)
-    if extensao_km > EXTENSAO_MAX_RECOMENDADA_KM:
-        extensao_txt = f"{extensao_km:,.0f}".replace(",", ".")
-        avisos.append(f"Área grande ({extensao_txt} km): perto das bordas as distâncias ficam até "
-                      f"{_br(erro_pct)}% maiores (projeção centrada na área).")
+    if n_excluidos_intraplaca is not None:
+        # Área que sobra longe dos limites de placa, estimada pela taxa de aceitação do sorteio
+        tlon, tlat = pontos_aleatorios(bbox, 20_000, np.random.default_rng(semente + 1), poligono)
+        area_estudo_km2 *= float(np.mean(aceitar(tlon, tlat)))
+    extensao_km = extensao_bbox_km(bbox)
+    avisos = list(avisos_previos)
+    if n_excluidos_intraplaca is not None:
+        avisos.append(f"Análise intraplaca: {n_excluidos_intraplaca} epicentros a menos de {_br(intraplaca_km, 0)} km "
+                      "de um limite de placa foram descartados, junto com essas falhas; o acaso só sorteia "
+                      "pontos longe dos limites.")
     if n < 30:
         avisos.append(f"Poucos epicentros ({n}): o teste tem pouco poder estatístico.")
     # Se parte da área não teve sismos importados, os pontos aleatórios caem onde não há
@@ -331,10 +404,9 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         "n_falhas": len(falhas),
         "area_km2": round(area_estudo_km2, 1),
         "extensao_km": round(extensao_km, 1),
-        "erro_escala_max_pct": round(erro_pct, 2),
         "parametros": {"buffers_km": buffers_km, "n_simulacoes": n_simulacoes, "semente": semente,
                        "tamanho_pool": tamanho_pool},
-        "projecao": proj_local(bbox),
+        "metodo_distancia": "geodésica (esfera de raio médio, 6.371 km)",
         "distancias": distancias_obs,
         "aleatorio": distancias_ale,
         "teste_mediana": {"p_valor": round(p_mediana, 4), "p_afastamento": round(p_afastamento, 4),
@@ -350,6 +422,9 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
                        "observado": obs_hist.tolist(),
                        "esperado": [round(float(v), 2) for v in esperado_hist]},
         "ranking_falhas": lista_ranking[:TOP_FALHAS],
+        "por_categoria": por_categoria,
+        "intraplaca_km": intraplaca_km,
+        "n_excluidos_intraplaca": n_excluidos_intraplaca,
         "por_epicentro": por_epicentro,
         "avisos": avisos,
         "cobertura_importada_pct": None if cobertura_importada is None else round(100 * cobertura_importada, 1),
@@ -398,6 +473,16 @@ def zona_buffer(falhas: Sequence[Dict], bbox: Dict, km: float, poligono=None) ->
 def _br(valor: float, casas: int = 1) -> str:
     """Número com vírgula decimal (padrão brasileiro)."""
     return f"{valor:.{casas}f}".replace(".", ",")
+
+
+# Tipos de falha que marcam limites de placas tectônicas (termos do GEM e em português)
+TERMOS_LIMITE_PLACA = ("subduction", "spreading", "ridge", "transform", "subduccao", "dorsal", "transformante")
+
+
+def eh_limite_placa(tipo: Optional[str]) -> bool:
+    import unicodedata
+    texto = unicodedata.normalize("NFKD", tipo or "").encode("ascii", "ignore").decode().lower()
+    return any(t in texto for t in TERMOS_LIMITE_PLACA)
 
 
 ALFA = 0.05

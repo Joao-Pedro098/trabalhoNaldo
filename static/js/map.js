@@ -2,7 +2,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // 1. MAPA (Leaflet)
     // ==========================================
-    const map = L.map('map', { zoomControl: false }).setView([-14.235, -51.925], 4);
+    // worldCopyJump: ao arrastar além de 180°, o mapa volta à cópia "principal" do mundo,
+    // onde os dados estão desenhados
+    const map = L.map('map', { zoomControl: false, worldCopyJump: true, minZoom: 2 }).setView([-14.235, -51.925], 4);
     L.control.zoom({ position: 'bottomright' }).addTo(map);
     L.control.scale({ position: 'bottomright', imperial: false }).addTo(map);
 
@@ -235,6 +237,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const bboxValido = (b) => b.sul < b.norte && b.oeste < b.leste;
 
     function atualizarTextoBbox() {
+        if ($('imp-mundo')?.checked) { $('bbox-texto').textContent = 'Mundo inteiro'; return; }
         const b = bboxVisivel();
         $('bbox-texto').textContent = `Lat ${b.sul.toFixed(2)} a ${b.norte.toFixed(2)} · Lon ${b.oeste.toFixed(2)} a ${b.leste.toFixed(2)}`;
     }
@@ -275,7 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     color: '#3c3c3c', weight: 0.6,
                     fillColor: corProfundidade(e.profundidade_km), fillOpacity: 0.8
                 }).bindPopup(() => popupEpicentro(e))
-                  .on('popupopen', () => ganchos.abrirEpicentro?.(e))
+                  .on('popupopen', (ev) => ganchos.abrirEpicentro?.(e, ev.popup))
                   .on('popupclose', () => ganchos.fecharEpicentro?.())
                   .addTo(camada);
             });
@@ -314,11 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
     $('imp-fim').max = isoData(hoje);
     $('imp-inicio').value = isoData(new Date(hoje.getFullYear() - 10, hoje.getMonth(), hoje.getDate()));
 
+    const MUNDO = { sul: -90, oeste: -180, norte: 90, leste: 180 };
+    const areaImportacao = () => ($('imp-mundo').checked ? { ...MUNDO } : bboxVisivel());
+
     $('form-importar').addEventListener('submit', async (ev) => {
         ev.preventDefault();
         const botao = $('btn-importar');
         const original = botao.innerHTML;
-        const bbox = bboxVisivel();
+        const bbox = areaImportacao();
         if (!bboxValido(bbox)) {
             showAlert('Área visível inválida. Ajuste o mapa e tente novamente.');
             return;
@@ -529,6 +535,12 @@ document.addEventListener('DOMContentLoaded', () => {
         usgs: ['Importar da USGS', 'Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.'],
         usp: ['Importar da USP', 'Rede Sismográfica Brasileira: sismos do Brasil desde 1724. Muitos têm profundidade não determinada.']
     };
+    $('imp-mundo').addEventListener('change', (e) => {
+        $('bbox-texto').textContent = e.target.checked ? 'Mundo inteiro' : '';
+        if (!e.target.checked) atualizarTextoBbox();
+        if (e.target.checked && $('imp-fonte').value === 'usgs' && Number($('imp-mag').value) < 5) $('imp-mag').value = 5;
+    });
+
     $('imp-fonte').addEventListener('change', (e) => {
         const [texto, dica] = DICAS_FONTE[e.target.value];
         $('btn-importar-texto').textContent = texto;
@@ -537,7 +549,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     $('btn-importar-sgb').addEventListener('click', () => {
-        const bbox = bboxVisivel();
+        const bbox = areaImportacao();
         if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }
         comCarregamento($('btn-importar-sgb'), 'Buscando no SGB...', async () => {
             const data = await api('/api/falhas/importar-sgb', {
@@ -551,10 +563,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     $('btn-importar-gem').addEventListener('click', () => {
-        const bbox = bboxVisivel();
+        const bbox = areaImportacao();
         if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }
         const largura = Math.max(bbox.norte - bbox.sul, bbox.leste - bbox.oeste);
-        if (largura > AREA_GRANDE_GRAUS && !confirm(
+        if (largura > AREA_GRANDE_GRAUS && !$('imp-mundo').checked && !confirm(
             `A área visível é muito grande (${Math.round(largura)}° de largura) e pode trazer milhares de falhas. ` +
             'Importar mesmo assim?')) return;
         comCarregamento($('btn-importar-gem'), 'Buscando no GEM...', async () => {

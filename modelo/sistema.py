@@ -25,7 +25,7 @@ class SistemaModelo:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT id, nome, parametros_json, resultado_json, criado_em FROM analises ORDER BY id DESC LIMIT {ph()}",
+            f"SELECT id, nome, parametros_json, resumo_json, criado_em FROM analises ORDER BY id DESC LIMIT {ph()}",
             (limite,),
         )
         linhas = cursor.fetchall()
@@ -35,13 +35,26 @@ class SistemaModelo:
         for linha in linhas:
             item = dict(linha)
             item["parametros"] = json.loads(item.pop("parametros_json") or "{}")
-            r = json.loads(item.pop("resultado_json") or "{}")
-            item.update(conclusao=r.get("conclusao"), conclusao_titulo=r.get("conclusao_titulo"),
-                        n_epicentros=r.get("n_epicentros"), n_falhas=r.get("n_falhas"),
-                        p_valor=(r.get("teste_mediana") or {}).get("p_valor"))
+            resumo = item.pop("resumo_json")
+            if resumo:
+                item.update(json.loads(resumo))
+            else:  # análise salva antes da coluna de resumo: lê o resultado completo
+                item.update(SistemaModelo._resumo_antigo(item["id"]))
             item["criado_em"] = str(item["criado_em"])
             analises.append(item)
         return analises
+
+    @staticmethod
+    def _resumo_antigo(analise_id: int) -> Dict:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT resultado_json FROM analises WHERE id = {ph()}", (analise_id,))
+        linha = cursor.fetchone()
+        conn.close()
+        r = json.loads((linha["resultado_json"] if hasattr(linha, "keys") else linha[0]) or "{}")
+        return {"conclusao": r.get("conclusao"), "conclusao_titulo": r.get("conclusao_titulo"),
+                "n_epicentros": r.get("n_epicentros"), "n_falhas": r.get("n_falhas"),
+                "p_valor": (r.get("teste_mediana") or {}).get("p_valor")}
 
     @staticmethod
     def apagar_analise(analise_id: int) -> bool:

@@ -96,10 +96,26 @@ document.addEventListener('DOMContentLoaded', () => {
         desenharTerritorio(e.target.value, true).catch(err => showAlert(err.message));
     });
 
+    async function carregarCatalogos() {
+        try {
+            const data = await api('/api/epicentros/fontes');
+            const sel = $('an-catalogo');
+            const atualSel = sel.value;
+            const nomes = { USGS: 'USGS (mundial)', USP: 'USP — Rede Sismográfica Brasileira' };
+            sel.innerHTML = data.fontes.length
+                ? data.fontes.map(f => `<option value="${escapeHtml(f.fonte)}">${escapeHtml(nomes[f.fonte] || f.fonte)} — ${f.total.toLocaleString('pt-BR')} sismos</option>`).join('')
+                : '<option value="">Nenhum sismo importado</option>';
+            if ([...sel.options].some(o => o.value === atualSel)) sel.value = atualSel;
+        } catch (e) {
+            showAlert(e.message);
+        }
+    }
+
     SF.ganchos.mostrarView = (nome) => {
         if (nome === 'analise') {
             atualizarBboxAnalise();
             carregarTerritorios();
+            carregarCatalogos();
             carregarFontes();
         }
     };
@@ -131,6 +147,8 @@ document.addEventListener('DOMContentLoaded', () => {
             territorio: document.querySelector('input[name="an-area"]:checked').value === 'territorio'
                 ? $('an-territorio').value : null,
             incluir_sem_profundidade: $('an-sem-prof').checked,
+            fontes_epicentros: $('an-catalogo').value ? [$('an-catalogo').value] : null,
+            intraplaca_km: $('an-intraplaca').checked ? Number($('an-intraplaca-km').value) : null,
             buffers_km: buffers,
             n_simulacoes: Number($('an-sims').value),
             prof_max_km: $('an-prof').value || null,
@@ -206,6 +224,7 @@ document.addEventListener('DOMContentLoaded', () => {
         renderBuffers(r);
         renderGrafico(r);
         renderRanking(r);
+        renderCategorias(r);
         renderOutros(r);
         desenharNoMapa(r);
     }
@@ -308,6 +327,26 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    function renderCategorias(r) {
+        const cats = r.por_categoria || [];
+        $('res-categorias-box').classList.toggle('hidden', cats.length === 0);
+        if (!cats.length) return;
+        $('res-categorias-hint').textContent = `Sismos a até ${br(cats[0].km, 0)} km de uma falha de cada tipo, ` +
+            'comparados ao acaso. Razão > 1: os sismos se concentram junto a esse tipo de falha.';
+        $('res-categorias').querySelector('tbody').innerHTML = cats.map(c => {
+            const cat = SF.CATEGORIAS_FALHA[c.categoria] || SF.CATEGORIAS_FALHA.outra;
+            const sig = c.p_ajustado < 0.05 && (c.razao || 0) > 1;
+            return `<tr class="${sig ? 'sig' : ''}">
+                <td><span class="falha-cor" style="background:${cat.cor}"></span>${escapeHtml(cat.rotulo)}</td>
+                <td>${c.n_falhas.toLocaleString('pt-BR')}</td>
+                <td><strong>${br(c.observado_pct)}%</strong></td>
+                <td>${br(c.esperado_pct)}%</td>
+                <td>${c.razao == null ? '–' : br(c.razao, 2) + '×'}</td>
+                <td>${pTexto(c.p_ajustado)}${sig ? ' <i class="fa-solid fa-star" title="Concentração significativa"></i>' : ''}</td>
+            </tr>`;
+        }).join('');
+    }
+
     function renderOutros(r) {
         const linhas = [
             ['Teste KS', `D = ${br(r.ks.estatistica, 3)}, p ${r.ks.p_valor < 0.001 ? '< 0,001' : '= ' + br(r.ks.p_valor, 3)}`,
@@ -350,22 +389,34 @@ document.addEventListener('DOMContentLoaded', () => {
         // Para áreas grandes (ex.: Brasil) a primeira vez leva alguns segundos
         const aviso = setTimeout(() => showAlert(`Calculando a zona de ${br(km, 0)} km em torno das falhas...`, 'info'), 1200);
         try {
-            const data = await api(`/api/analises/${atual.id}/buffer?km=${km}`);
+            // Análises muito extensas (ex.: o mundo): a zona é calculada só para a área visível
+            const params = new URLSearchParams({ km });
+            if ((atual.extensao_km || 0) > 3000) Object.entries(SF.bboxVisivel()).forEach(([k, v]) => params.set(k, v));
+            const data = await api(`/api/analises/${atual.id}/buffer?${params}`);
             clearTimeout(aviso);
             if (kmSelecionado !== km) return; // outro buffer foi escolhido enquanto carregava
             camadaBuffer.clearLayers();
+            if (data.mensagem && enquadrar) showAlert(data.mensagem, 'info');
             if (data.geometria) {
                 L.geoJSON(data.geometria, {
                     style: { color: COR_ESPERADO, weight: 1, opacity: 0.6, fillColor: COR_ESPERADO, fillOpacity: 0.12 },
                     interactive: false
                 }).addTo(camadaBuffer);
             }
-            if (enquadrar) enquadrarArea();
+            if (enquadrar && !data.precisa_vista) enquadrarArea();
         } catch (e) {
             clearTimeout(aviso);
             showAlert(`Não foi possível desenhar a zona de ${km} km: ${e.message}`);
         }
     }
+
+    // Em análises grandes a zona acompanha o mapa
+    let debounceZona = null;
+    map.on('moveend', () => {
+        if (!atual?.id || kmSelecionado == null || (atual.extensao_km || 0) <= 3000) return;
+        clearTimeout(debounceZona);
+        debounceZona = setTimeout(() => mostrarBuffer(kmSelecionado, false), 400);
+    });
 
     function enquadrar(limites) {
         const { esquerda, topo } = SF.areaCobertaPeloPainel();
@@ -388,9 +439,21 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!info) return '';
         return `<span class="popup-dist"><i class="fa-solid fa-ruler"></i> ${br(info.dist_km, info.dist_km < 10 ? 2 : 1)} km da falha mais próxima</span>`;
     };
-    SF.ganchos.abrirEpicentro = (e) => {
+    SF.ganchos.abrirEpicentro = async (e, popup) => {
         camadaLigacao.clearLayers();
-        const info = porEpicentro.get(e.id);
+        let info = porEpicentro.get(e.id);
+        if (!info && atual?.por_epicentro_omitido && atual.id) {
+            // Análise grande: a lista por epicentro não veio; busca só este evento
+            try {
+                const data = await api(`/api/analises/${atual.id}/epicentros/${encodeURIComponent(e.id)}`);
+                info = data.epicentro;
+                porEpicentro.set(e.id, info);
+                const alvo = popup?.getElement()?.querySelector('.popup-epi > div:last-child');
+                if (alvo && !alvo.querySelector('.popup-dist')) alvo.insertAdjacentHTML('beforeend', SF.ganchos.popupEpicentro(e));
+            } catch {
+                return; // evento fora da análise (ex.: outro catálogo ou filtrado)
+            }
+        }
         if (!info) return;
         L.polyline([[e.lat, e.lon], info.ponto_falha], {
             color: '#202124', weight: 2, dashArray: '4 4', interactive: false

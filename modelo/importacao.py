@@ -60,13 +60,13 @@ class ImportacaoModelo:
         return linhas
 
     @staticmethod
-    def cobertura(tipo: str, bbox: Dict, poligono=None) -> Optional[float]:
+    def cobertura(tipo: str, bbox: Dict, poligono=None, fontes: Optional[List[str]] = None) -> Optional[float]:
         """Fração (0–1) da área de estudo coberta pelas importações do `tipo`.
 
         A área de estudo é `bbox` ou, se dado, o `poligono` (lon/lat). None quando não há
         nenhuma importação registrada (dados antigos, de antes do registro).
         """
-        importacoes = ImportacaoModelo.listar(tipo, limite=10_000)
+        importacoes = [i for i in ImportacaoModelo.listar(tipo, limite=10_000) if not fontes or i["fonte"] in fontes]
         if not importacoes:
             return None
         uniao = shapely.union_all([_caixa_area_igual(i["bbox"]) for i in importacoes])
@@ -78,9 +78,13 @@ class ImportacaoModelo:
         return float(shapely.intersection(uniao, area).area / area.area) if area.area > 0 else None
 
     @staticmethod
-    def area_importada(tipo: str, bbox_referencia: Optional[Dict] = None) -> Optional[Dict]:
-        """Caixa que envolve as importações do `tipo` (só as que cruzam `bbox_referencia`, se dada)."""
-        caixas = [i["bbox"] for i in ImportacaoModelo.listar(tipo, limite=10_000)]
+    def area_importada(tipo: str, bbox_referencia: Optional[Dict] = None,
+                       fontes: Optional[List[str]] = None) -> Optional[Dict]:
+        """Caixa que envolve as importações do `tipo` (só as que cruzam `bbox_referencia`, se dada).
+
+        `fontes` restringe a um catálogo: importações de catálogos diferentes não se somam.
+        """
+        caixas = [i["bbox"] for i in ImportacaoModelo.listar(tipo, limite=10_000) if not fontes or i["fonte"] in fontes]
         if bbox_referencia:
             r = bbox_referencia
             caixas = [b for b in caixas if b["sul"] <= r["norte"] and b["norte"] >= r["sul"]

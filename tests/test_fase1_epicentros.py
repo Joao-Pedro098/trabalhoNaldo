@@ -63,12 +63,13 @@ def test_importar_salva_e_nao_duplica(cliente, usgs_falso):
     assert cliente.get("/api/status").get_json()["contagens"]["epicentros"] == 3
 
 
-def test_importar_recusa_acima_do_limite(cliente, monkeypatch):
-    monkeypatch.setattr(usgs, "contar", lambda *a: 50000)
+def test_importar_recusa_acima_do_teto(cliente, monkeypatch):
+    # Acima de 20 mil a importação vira lotes (Fase 8); acima do teto total ainda é recusada
+    monkeypatch.setattr(usgs, "contar", lambda *a: 300000)
     monkeypatch.setattr(usgs, "buscar", lambda *a: pytest.fail("não deveria baixar"))
     resp = importar(cliente)
     assert resp.status_code == 400
-    assert "50.000" in resp.get_json()["erro"]
+    assert "300.000" in resp.get_json()["erro"]
 
 
 def test_importar_erro_da_fonte_vira_502(cliente, monkeypatch):

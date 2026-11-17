@@ -12,8 +12,11 @@ def _sql(comando: str) -> str:
 
 
 def _filtros(bbox: Optional[Dict], min_mag: Optional[float],
-             inicio: Optional[str], fim: Optional[str]) -> Tuple[str, list]:
+             inicio: Optional[str], fim: Optional[str], fontes: Optional[List[str]] = None) -> Tuple[str, list]:
     condicoes, valores = [], []
+    if fontes:
+        condicoes.append(f"fonte IN ({', '.join('?' for _ in fontes)})")
+        valores += list(fontes)
     if bbox:
         condicoes.append("lat BETWEEN ? AND ? AND lon BETWEEN ? AND ?")
         valores += [bbox["sul"], bbox["norte"], bbox["oeste"], bbox["leste"]]
@@ -63,9 +66,9 @@ class EpicentroModelo:
     @staticmethod
     def listar(bbox: Optional[Dict] = None, min_mag: Optional[float] = None,
                inicio: Optional[str] = None, fim: Optional[str] = None,
-               limite: int = 5000) -> Dict:
+               limite: int = 5000, fontes: Optional[List[str]] = None) -> Dict:
         """Epicentros filtrados, maiores magnitudes primeiro. Inclui o total sem limite."""
-        where, valores = _filtros(bbox, min_mag, inicio, fim)
+        where, valores = _filtros(bbox, min_mag, inicio, fim, fontes)
         conn = get_db_connection()
         cursor = conn.cursor()
 
@@ -82,6 +85,18 @@ class EpicentroModelo:
         for l in linhas:
             l["data_hora"] = str(l["data_hora"])
         return {"total": total, "epicentros": linhas}
+
+    @staticmethod
+    def fontes(bbox: Optional[Dict] = None) -> List[Dict]:
+        """Quantidade de epicentros por catálogo (na área, se dada)."""
+        where, valores = _filtros(bbox, None, None, None)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(_sql(f"SELECT fonte, COUNT(*) AS total FROM epicentros {where} GROUP BY fonte ORDER BY total DESC"),
+                       valores)
+        linhas = [dict(l) for l in cursor.fetchall()]
+        conn.close()
+        return linhas
 
     @staticmethod
     def resumo() -> Dict:

@@ -52,6 +52,11 @@ def listar_epicentros():
     return EpicentrosControle.listar()
 
 
+@rotas_bp.route("/api/epicentros/fontes", methods=["GET"])
+def fontes_epicentros():
+    return EpicentrosControle.fontes()
+
+
 @rotas_bp.route("/api/epicentros/resumo", methods=["GET"])
 def resumo_epicentros():
     return EpicentrosControle.resumo()
@@ -107,6 +112,11 @@ def obter_analise(analise_id):
 @rotas_bp.route("/api/analises/<int:analise_id>", methods=["DELETE"])
 def apagar_analise(analise_id):
     return AnaliseControle.apagar(analise_id)
+
+
+@rotas_bp.route("/api/analises/<int:analise_id>/epicentros/<epicentro_id>", methods=["GET"])
+def epicentro_da_analise(analise_id, epicentro_id):
+    return AnaliseControle.epicentro(analise_id, epicentro_id)
 
 
 @rotas_bp.route("/api/analises/<int:analise_id>/exportar", methods=["GET"])

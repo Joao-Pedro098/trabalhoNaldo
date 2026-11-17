@@ -59,4 +59,6 @@ class SistemaControle:
     @staticmethod
     def apagar_analises():
         SistemaModelo.limpar_analises()
+        from modelo.analise import AnaliseModelo
+        AnaliseModelo.esquecer()
         return resposta_sucesso(mensagem="Histórico de análises apagado.")
