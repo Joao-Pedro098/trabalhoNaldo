@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Ambientes virtuais
+venv/
+env/
+.env
+
+# Banco local (SQLite)
+*.db
+*.sqlite3
+
+# Logs
+*.log
+
+# IDEs
+.vscode/
+.idea/

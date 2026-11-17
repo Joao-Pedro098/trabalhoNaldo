@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SismoFalhas — Falhas e Epicentros</title>
+
+    <!-- Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+
+    <!-- Fontes e ícones -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <!-- Dock lateral -->
+    <nav class="left-dock">
+        <div class="dock-logo" title="SismoFalhas"><i class="fa-solid fa-house-crack"></i></div>
+
+        <div class="dock-main-actions">
+            <button class="dock-btn active" data-view="dados" title="Dados (epicentros e falhas)">
+                <div class="dock-icon-circle"><i class="fa-solid fa-layer-group"></i></div>
+                <span>Dados</span>
+            </button>
+            <button class="dock-btn" data-view="analise" title="Análise de correlação">
+                <div class="dock-icon-circle"><i class="fa-solid fa-chart-column"></i></div>
+                <span>Análise</span>
+            </button>
+            <button class="dock-btn" data-view="historico" title="Análises salvas">
+                <div class="dock-icon-circle"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                <span>Histórico</span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Painel principal -->
+    <aside class="maps-panel" id="maps-panel">
+
+        <header class="panel-header">
+            <h1>SismoFalhas</h1>
+            <p>Correlação espacial entre falhas mapeadas e epicentros registrados</p>
+        </header>
+
+        <!-- Busca de região -->
+        <div class="search-box">
+            <div class="input-container">
+                <i class="fa-solid fa-magnifying-glass input-icon"></i>
+                <input type="text" id="region-input" placeholder="Ir para uma região (ex.: João Câmara, RN)" autocomplete="off">
+                <button class="input-action-btn" id="btn-my-location" title="Ir para minha localização">
+                    <i class="fa-solid fa-crosshairs"></i>
+                </button>
+                <div id="region-suggestions" class="suggestions-dropdown hidden"></div>
+            </div>
+        </div>
+
+        <!-- Mobile: nome da aba atual + alternar painel -->
+        <div class="mobile-view-tabs">
+            <button class="mobile-tab active" data-view="dados">Dados</button>
+            <button class="mobile-tab" data-view="analise">Análise</button>
+            <button class="mobile-tab" data-view="historico">Histórico</button>
+        </div>
+
+        <div id="alert-box" class="alert hidden" role="status"></div>
+
+        <div class="panel-body">
+            <!-- VIEW: Dados -->
+            <section class="panel-view" id="view-dados">
+                <h2 class="section-title">Base de dados</h2>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <span class="stat-icon epicentro"><i class="fa-solid fa-circle-dot"></i></span>
+                        <span class="stat-value" id="count-epicentros">–</span>
+                        <span class="stat-label">epicentros</span>
+                    </div>
+                    <div class="stat-card">
+                        <span class="stat-icon falha"><i class="fa-solid fa-wave-square"></i></span>
+                        <span class="stat-value" id="count-falhas">–</span>
+                        <span class="stat-label">falhas</span>
+                    </div>
+                </div>
+                <p class="db-info"><i class="fa-solid fa-database"></i> Banco em uso: <strong id="db-backend">–</strong></p>
+
+                <div class="empty-state-box" id="dados-vazio">
+                    <i class="fa-solid fa-cloud-arrow-down"></i>
+                    <p>Nenhum dado importado ainda.</p>
+                    <small>A importação de epicentros (USGS) e de falhas (GEM / GeoJSON) entra nas próximas fases.</small>
+                </div>
+            </section>
+
+            <!-- VIEW: Análise -->
+            <section class="panel-view hidden" id="view-analise">
+                <h2 class="section-title">Análise de correlação</h2>
+                <div class="empty-state-box">
+                    <i class="fa-solid fa-chart-column"></i>
+                    <p>Importe epicentros e falhas para rodar a análise.</p>
+                    <small>Distância à falha mais próxima, buffer e teste de Monte Carlo.</small>
+                </div>
+            </section>
+
+            <!-- VIEW: Histórico -->
+            <section class="panel-view hidden" id="view-historico">
+                <div class="history-drawer-header">
+                    <h2 class="section-title">Análises salvas</h2>
+                    <button class="btn-clear-db hidden" id="btn-clear-history">Limpar tudo</button>
+                </div>
+                <div id="history-list">
+                    <p class="empty-state">Nenhuma análise salva ainda.</p>
+                </div>
+            </section>
+        </div>
+
+        <!-- Recolher / expandir no mobile -->
+        <div class="mobile-toggle-bar" id="mobile-toggle-btn">
+            <span class="mobile-handle-pill"></span>
+            <span class="mobile-toggle-text" id="mobile-toggle-text"><i class="fa-solid fa-chevron-up"></i> Recolher para ver o mapa</span>
+        </div>
+    </aside>
+
+    <!-- Botões flutuantes -->
+    <div class="map-floating-controls">
+        <button class="fab-location" id="fab-my-location" title="Ir para minha localização">
+            <i class="fa-solid fa-crosshairs"></i>
+        </button>
+        <button class="fab-open-panel hidden" id="fab-open-panel">
+            <i class="fa-solid fa-sliders"></i> Abrir painel
+        </button>
+    </div>
+
+    <!-- Coordenadas do cursor -->
+    <div class="coords-readout" id="coords-readout">--</div>
+
+    <!-- Menu do botão direito -->
+    <div id="context-menu" class="context-menu hidden">
+        <button id="ctx-copy-coords"><i class="fa-regular fa-copy"></i> Copiar coordenadas</button>
+        <button id="ctx-whats-here"><i class="fa-solid fa-circle-question"></i> O que há aqui?</button>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script src="{{ url_for('static', filename='js/map.js') }}"></script>
+</body>
+</html>
