@@ -20,6 +20,9 @@ document.addEventListener('DOMContentLoaded', () => {
     camadasBase['Relevo'].addTo(map);
 
     // Camadas de dados: preenchidas nas próximas fases (epicentros, falhas, buffers...)
+    // Falhas ficam por cima dos epicentros (overlayPane = 400): linhas finas cobrem pouco
+    // e ficariam escondidas sob os círculos.
+    map.createPane('falhas').style.zIndex = 450;
     const camadasDados = {
         'Epicentros': L.layerGroup().addTo(map),
         'Falhas': L.layerGroup().addTo(map)
@@ -52,7 +55,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function api(url, opcoes = {}) {
         const res = await fetch(url, opcoes);
-        const data = await res.json();
+        let data;
+        try {
+            data = await res.json();
+        } catch {
+            throw new Error(`Resposta inesperada do servidor (HTTP ${res.status})`);
+        }
         if (!data.sucesso) throw new Error(data.erro || 'Erro na requisição');
         return data;
     }
@@ -101,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 resumoEl.classList.add('hidden');
             }
+            carregarFontesFalhas();
         } catch (e) {
             showAlert(`Não foi possível consultar o banco: ${e.message}`);
         }
@@ -123,6 +132,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const corProfundidade = (p) => (p == null ? '#9aa0a6' : FAIXAS_PROF.find(f => p <= f.max).cor);
     const raioMagnitude = (m) => Math.max(2.5, Math.min(18, 2 + ((m ?? 0) - 1) * 1.9));
 
+    // Categorias de falha (definidas no backend em modelo/falha.py)
+    const CATEGORIAS_FALHA = {
+        normal: { cor: '#1f78b4', rotulo: 'Normal' },
+        reversa: { cor: '#c0392b', rotulo: 'Reversa / empurrão' },
+        transcorrente: { cor: '#2a9d4b', rotulo: 'Transcorrente' },
+        dorsal: { cor: '#e07b00', rotulo: 'Dorsal oceânica' },
+        outra: { cor: '#6b2c91', rotulo: 'Outra / sem tipo' }
+    };
+
     const legenda = L.control({ position: 'topright' });
     legenda.onAdd = () => {
         const div = L.DomUtil.create('div', 'map-legend');
@@ -134,7 +152,9 @@ document.addEventListener('DOMContentLoaded', () => {
             <strong>Profundidade</strong>
             ${FAIXAS_PROF.map(f => `<span class="leg-item"><i style="background:${f.cor}"></i>${f.rotulo}</span>`).join('')}
             <strong>Magnitude</strong>
-            <div class="leg-mags">${mags}</div>`;
+            <div class="leg-mags">${mags}</div>
+            <strong>Falhas</strong>
+            ${Object.values(CATEGORIAS_FALHA).map(c => `<span class="leg-item"><b class="leg-linha" style="background:${c.cor}"></b>${c.rotulo}</span>`).join('')}`;
         L.DomEvent.disableClickPropagation(div);
         return div;
     };
@@ -212,7 +232,7 @@ document.addEventListener('DOMContentLoaded', () => {
     map.on('moveend', () => {
         atualizarTextoBbox();
         clearTimeout(debounceMapa);
-        debounceMapa = setTimeout(carregarEpicentros, 300);
+        debounceMapa = setTimeout(() => { carregarEpicentros(); carregarFalhas(); }, 300);
     });
 
     $('filtro-mag').addEventListener('input', (e) => {
@@ -269,6 +289,159 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {
             showAlert(e.message);
         }
+    });
+
+    // ==========================================
+    // 5c. FALHAS: IMPORTAÇÃO (GEM / ARQUIVO) E CAMADA
+    // ==========================================
+    const ATRIBUICAO_GEM = 'Falhas: <a href="https://github.com/GEMScienceTools/gem-global-active-faults" target="_blank" rel="noopener">GEM GAF-DB</a> (CC-BY-SA 4.0)';
+    let atribuicaoGemAtiva = false;
+    // SVG (não canvas): um canvas por cima capturaria os cliques de toda a área e
+    // bloquearia os popups dos epicentros. No SVG só o traçado recebe o clique
+    // (o painel tem pointer-events: none no CSS). Um único renderizador para não
+    // empilhar elementos a cada carga.
+    const renderizadorFalhas = L.svg({ pane: 'falhas' });
+    const corFalha = (f) => (CATEGORIAS_FALHA[f.properties.categoria] || CATEGORIAS_FALHA.outra).cor;
+
+    const popupFalha = (p) => {
+        const cat = CATEGORIAS_FALHA[p.categoria] || CATEGORIAS_FALHA.outra;
+        // Mostra alguns atributos úteis do GEM / arquivo, sem despejar tudo
+        const extras = Object.entries(p.atributos || {})
+            .filter(([k, v]) => v !== null && v !== '' && !['name', 'nome', 'slip_type', 'tipo'].includes(k))
+            .slice(0, 6)
+            .map(([k, v]) => `<tr><th>${escapeHtml(k)}</th><td>${escapeHtml(v)}</td></tr>`).join('');
+        return `<div class="popup-falha">
+            <strong>${escapeHtml(p.nome || 'Falha sem nome')}</strong>
+            <span class="falha-tag" style="background:${cat.cor}">${cat.rotulo}</span>
+            ${p.tipo ? `<span>Tipo original: ${escapeHtml(p.tipo)}</span>` : ''}
+            <span>Fonte: ${escapeHtml(p.fonte)}</span>
+            ${extras ? `<table>${extras}</table>` : ''}
+        </div>`;
+    };
+
+    let requisicaoFalhas = 0;
+    async function carregarFalhas() {
+        const id = ++requisicaoFalhas;
+        const b = bboxVisivel();
+        if (!bboxValido(b)) return;
+        try {
+            const data = await api(`/api/falhas?${new URLSearchParams({ ...b, limite: LIMITE_EXIBICAO })}`);
+            if (id !== requisicaoFalhas) return;
+            const camada = camadasDados['Falhas'];
+            camada.clearLayers();
+            // Traço visível (fino, não clicável)...
+            L.geoJSON(data.falhas, {
+                pane: 'falhas', renderer: renderizadorFalhas, interactive: false,
+                style: (f) => ({ color: corFalha(f), weight: 2.2, opacity: 0.95 })
+            }).addTo(camada);
+            // ...e traço invisível largo por cima, para facilitar o clique
+            L.geoJSON(data.falhas, {
+                pane: 'falhas', renderer: renderizadorFalhas,
+                style: { color: '#000', weight: 12, opacity: 0 },
+                onEachFeature: (f, layer) => layer.bindPopup(() => popupFalha(f.properties))
+            }).addTo(camada);
+
+            const temGem = data.falhas.features.some(f => f.properties.fonte === 'GEM GAF-DB');
+            if (temGem !== atribuicaoGemAtiva) {
+                map.attributionControl[temGem ? 'addAttribution' : 'removeAttribution'](ATRIBUICAO_GEM);
+                atribuicaoGemAtiva = temGem;
+            }
+
+            const n = data.falhas.features.length;
+            $('exibindo-falhas-texto').textContent = data.total === 0 ? ''
+                : n < data.total
+                    ? `Exibindo as ${n.toLocaleString('pt-BR')} maiores de ${data.total.toLocaleString('pt-BR')} falhas na área visível.`
+                    : `Exibindo ${n.toLocaleString('pt-BR')} falhas na área visível.`;
+        } catch (e) {
+            showAlert(`Falha ao carregar as falhas: ${e.message}`);
+        }
+    }
+
+    async function carregarFontesFalhas() {
+        try {
+            const data = await api('/api/falhas/fontes');
+            const lista = $('fontes-falhas');
+            $('fontes-falhas-box').classList.toggle('hidden', data.fontes.length === 0);
+            lista.innerHTML = '';
+            data.fontes.forEach(f => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span><strong>${escapeHtml(f.fonte)}</strong><small>${f.total.toLocaleString('pt-BR')} ${f.total === 1 ? 'falha' : 'falhas'}</small></span>`;
+                const btn = document.createElement('button');
+                btn.className = 'btn-icon-danger';
+                btn.title = `Apagar falhas de ${f.fonte}`;
+                btn.innerHTML = '<i class="fa-regular fa-trash-can"></i>';
+                btn.addEventListener('click', () => apagarFalhas(f.fonte));
+                li.appendChild(btn);
+                lista.appendChild(li);
+            });
+        } catch (e) {
+            showAlert(e.message);
+        }
+    }
+
+    async function apagarFalhas(fonte) {
+        if (!confirm(`Apagar todas as falhas da fonte "${fonte}"? Esta ação não pode ser desfeita.`)) return;
+        try {
+            const data = await api(`/api/falhas?${new URLSearchParams({ fonte })}`, { method: 'DELETE' });
+            showAlert(data.mensagem, 'info');
+            await Promise.all([carregarStatus(), carregarFalhas()]);
+        } catch (e) {
+            showAlert(e.message);
+        }
+    }
+
+    async function comCarregamento(botao, textoCarregando, acao) {
+        const original = botao.innerHTML;
+        botao.disabled = true;
+        botao.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> ${textoCarregando}`;
+        try {
+            await acao();
+        } catch (e) {
+            showAlert(e.message);
+        } finally {
+            botao.disabled = false;
+            botao.innerHTML = original;
+        }
+    }
+
+    $('btn-importar-gem').addEventListener('click', () => {
+        const bbox = bboxVisivel();
+        if (!bboxValido(bbox)) { showAlert('Área visível inválida. Ajuste o mapa e tente novamente.'); return; }
+        comCarregamento($('btn-importar-gem'), 'Buscando no GEM...', async () => {
+            const data = await api('/api/falhas/importar-gem', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bbox })
+            });
+            showAlert(data.mensagem, data.recebidos ? 'info' : 'error');
+            await Promise.all([carregarStatus(), carregarFalhas()]);
+        });
+    });
+
+    $('upload-arquivo').addEventListener('change', (e) => {
+        const arquivo = e.target.files[0];
+        $('upload-nome').innerHTML = arquivo
+            ? `<i class="fa-regular fa-file"></i> ${escapeHtml(arquivo.name)}`
+            : '<i class="fa-regular fa-folder-open"></i> Escolher arquivo...';
+        if (arquivo && !$('upload-fonte').value) {
+            $('upload-fonte').value = arquivo.name.replace(/\.[^.]+$/, '');
+        }
+    });
+
+    $('form-upload').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        const arquivo = $('upload-arquivo').files[0];
+        if (!arquivo) { showAlert('Escolha um arquivo.'); return; }
+        comCarregamento($('btn-upload'), 'Enviando...', async () => {
+            const form = new FormData();
+            form.append('arquivo', arquivo);
+            form.append('fonte', $('upload-fonte').value.trim());
+            const data = await api('/api/falhas/upload', { method: 'POST', body: form });
+            showAlert(data.mensagem, 'info');
+            $('form-upload').reset();
+            $('upload-nome').innerHTML = '<i class="fa-regular fa-folder-open"></i> Escolher arquivo...';
+            await Promise.all([carregarStatus(), carregarFalhas()]);
+        });
     });
 
     // ==========================================
@@ -459,4 +632,5 @@ document.addEventListener('DOMContentLoaded', () => {
     carregarStatus();
     atualizarTextoBbox();
     carregarEpicentros();
+    carregarFalhas();
 });

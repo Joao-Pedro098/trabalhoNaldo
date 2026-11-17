@@ -4,6 +4,7 @@ import sys
 
 from flask import Flask
 
+from controle.respostas import resposta_erro
 from db.database import init_db, nome_backend
 from rotas.rotas import rotas_bp
 
@@ -17,8 +18,15 @@ def criar_app() -> Flask:
     app = Flask(__name__, template_folder="templates", static_folder="static")
     # Defina SECRET_KEY no ambiente em produção; sem ela, gera uma chave por execução.
     app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)
+    # Limite de upload (arquivos de falhas): 50 MB
+    app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024
     init_db()
     app.register_blueprint(rotas_bp)
+
+    @app.errorhandler(413)
+    def arquivo_grande(_erro):
+        return resposta_erro("Arquivo maior que o limite de 50 MB.", status=413)
+
     return app
 
 

@@ -392,6 +392,82 @@ html, body {
 
 .btn-link-danger:hover { text-decoration: underline; }
 
+.fonte-opcao { display: flex; flex-direction: column; gap: 6px; }
+.fonte-opcao > strong { font-size: 13px; font-weight: 500; display: flex; gap: 8px; align-items: center; }
+.fonte-opcao > strong i { color: var(--accent); }
+.fonte-opcao > small { font-size: 12px; color: var(--texto-2); line-height: 1.4; }
+.fonte-opcao > small b { color: var(--texto); font-weight: 500; }
+
+.form-sep { border: none; border-top: 1px solid #ececec; margin: 2px 0; }
+
+.btn-secondary {
+    height: 36px;
+    border: 1px solid var(--accent);
+    border-radius: 18px;
+    background: var(--painel);
+    color: var(--accent);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: background 0.15s;
+}
+
+.btn-secondary:hover { background: var(--accent-soft); }
+.btn-secondary:disabled { opacity: 0.7; cursor: progress; }
+
+.file-input {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 38px;
+    padding: 0 12px;
+    border: 1px dashed var(--borda);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--texto-2);
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.file-input:hover { border-color: var(--accent); color: var(--accent); }
+.file-input input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.file-input span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; gap: 8px; align-items: center; }
+
+.form-row input[type="text"] { width: 100%; }
+
+.fontes-lista { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+
+.fontes-lista li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+}
+
+.fontes-lista li span { display: flex; flex-direction: column; min-width: 0; }
+.fontes-lista li strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fontes-lista li small { color: var(--texto-2); }
+
+.btn-icon-danger {
+    flex: none;
+    background: none;
+    border: none;
+    color: var(--texto-3);
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    cursor: pointer;
+}
+
+.btn-icon-danger:hover { background: var(--erro-fundo); color: #d93025; }
+
 /* Legenda do mapa */
 .map-legend {
     background: rgba(255, 255, 255, 0.95);
@@ -425,6 +501,36 @@ html, body {
     border: 1px solid #3c3c3c;
     background: #fff;
 }
+
+/* Só os traços de falha recebem clique; o resto do painel deixa passar para os epicentros */
+.leaflet-falhas-pane,
+.leaflet-falhas-pane svg { pointer-events: none; }
+.leaflet-falhas-pane path.leaflet-interactive { pointer-events: stroke; }
+
+.leg-linha {
+    display: inline-block;
+    width: 16px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+/* Popup da falha */
+.popup-falha { display: flex; flex-direction: column; gap: 3px; font-size: 12px; min-width: 200px; max-width: 280px; }
+.popup-falha strong { font-size: 13px; }
+.popup-falha span { color: var(--texto-2); }
+
+.popup-falha .falha-tag {
+    align-self: flex-start;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 1px 8px;
+    border-radius: 10px;
+}
+
+.popup-falha table { margin-top: 4px; border-collapse: collapse; font-size: 11px; }
+.popup-falha th { text-align: left; font-weight: 500; color: var(--texto-2); padding: 1px 8px 1px 0; vertical-align: top; }
+.popup-falha td { color: var(--texto); word-break: break-word; }
 
 /* Popup do epicentro */
 .popup-epi { display: flex; gap: 10px; font-size: 12px; min-width: 220px; }

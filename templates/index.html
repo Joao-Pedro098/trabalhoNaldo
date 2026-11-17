@@ -112,6 +112,33 @@
                     <small class="form-hint">Até 20.000 eventos por importação. Dados repetidos são atualizados, não duplicados.</small>
                 </form>
 
+                <!-- Importação de falhas -->
+                <h2 class="section-title">Importar falhas geológicas</h2>
+                <div class="form-card">
+                    <div class="fonte-opcao">
+                        <strong><i class="fa-solid fa-earth-americas"></i> GEM Global Active Faults</strong>
+                        <small>Base mundial de falhas ativas (Andes, Califórnia, Himalaia...). <b>Não cobre o Brasil.</b> Usa a mesma área visível acima.</small>
+                        <button type="button" class="btn-secondary" id="btn-importar-gem">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> Importar falhas do GEM
+                        </button>
+                    </div>
+                    <hr class="form-sep">
+                    <form class="fonte-opcao" id="form-upload">
+                        <strong><i class="fa-solid fa-file-arrow-up"></i> Enviar arquivo</strong>
+                        <small>GeoJSON ou shapefile em .zip (ex.: falhas do SGB/CPRM), em coordenadas geográficas (WGS84 / SIRGAS 2000).</small>
+                        <label class="file-input">
+                            <input type="file" id="upload-arquivo" accept=".geojson,.json,.zip" required>
+                            <span id="upload-nome"><i class="fa-regular fa-folder-open"></i> Escolher arquivo...</span>
+                        </label>
+                        <div class="form-row">
+                            <label>Nome da fonte<input type="text" id="upload-fonte" maxlength="80" placeholder="ex.: SGB - Falhas RN"></label>
+                        </div>
+                        <button type="submit" class="btn-secondary" id="btn-upload">
+                            <i class="fa-solid fa-upload"></i> Enviar falhas
+                        </button>
+                    </form>
+                </div>
+
                 <!-- Exibição -->
                 <h2 class="section-title">Exibição no mapa</h2>
                 <div class="form-card">
@@ -120,9 +147,16 @@
                         <input type="range" id="filtro-mag" min="0" max="8" step="0.5" value="0">
                     </label>
                     <small class="form-hint" id="exibindo-texto">Nenhum epicentro na área visível.</small>
+                    <small class="form-hint" id="exibindo-falhas-texto"></small>
                     <button type="button" class="btn-link-danger hidden" id="btn-apagar-epicentros">
                         <i class="fa-regular fa-trash-can"></i> Apagar todos os epicentros
                     </button>
+                </div>
+
+                <!-- Fontes de falhas -->
+                <div class="hidden" id="fontes-falhas-box">
+                    <h2 class="section-title">Fontes de falhas</h2>
+                    <ul class="fontes-lista" id="fontes-falhas"></ul>
                 </div>
             </section>
 

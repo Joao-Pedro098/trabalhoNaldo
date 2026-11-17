@@ -1,6 +1,7 @@
 from flask import Blueprint
 
 from controle.epicentros_controle import EpicentrosControle
+from controle.falhas_controle import FalhasControle
 from controle.sistema_controle import SistemaControle
 
 rotas_bp = Blueprint("rotas", __name__)
@@ -52,6 +53,32 @@ def resumo_epicentros():
 @rotas_bp.route("/api/epicentros", methods=["DELETE"])
 def apagar_epicentros():
     return EpicentrosControle.apagar()
+
+
+# ---- Falhas ----
+@rotas_bp.route("/api/falhas/importar-gem", methods=["POST"])
+def importar_falhas_gem():
+    return FalhasControle.importar_gem()
+
+
+@rotas_bp.route("/api/falhas/upload", methods=["POST"])
+def enviar_falhas():
+    return FalhasControle.enviar_arquivo()
+
+
+@rotas_bp.route("/api/falhas", methods=["GET"])
+def listar_falhas():
+    return FalhasControle.listar()
+
+
+@rotas_bp.route("/api/falhas/fontes", methods=["GET"])
+def fontes_falhas():
+    return FalhasControle.fontes()
+
+
+@rotas_bp.route("/api/falhas", methods=["DELETE"])
+def apagar_falhas():
+    return FalhasControle.apagar()
 
 
 # ---- Análises salvas (preenchidas a partir da Fase 5) ----
