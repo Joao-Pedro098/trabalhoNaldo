@@ -5,6 +5,7 @@ from flask import request
 from controle.respostas import resposta_erro, resposta_sucesso
 from modelo.epicentro import EpicentroModelo
 from modelo.fontes import usgs
+from modelo.importacao import ImportacaoModelo
 
 
 class ErroValidacao(ValueError):
@@ -73,6 +74,9 @@ class EpicentrosControle:
             return resposta_erro(str(e), status=502)
 
         resultado = EpicentroModelo.salvar_lote(registros)
+        # Registra a área consultada mesmo sem eventos: "nenhum sismo aqui" também é dado
+        ImportacaoModelo.registrar("epicentros", "USGS", bbox,
+                                   {"inicio": inicio, "fim": fim, "min_mag": min_mag}, len(registros))
         resultado["recebidos"] = len(registros)
         resultado["truncado"] = len(registros) >= usgs.LIMITE_USGS
         msg = (f"{len(registros)} eventos recebidos da USGS: "

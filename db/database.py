@@ -128,6 +128,22 @@ def _ddl(backend: str):
             criado_em {t['ts']} DEFAULT CURRENT_TIMESTAMP
         )
         """,
+        # Registro de cada importação: guarda a ÁREA consultada, para a análise saber
+        # onde realmente há dados (a hipótese nula só é justa dentro dessa área).
+        f"""
+        CREATE TABLE IF NOT EXISTS importacoes (
+            id {t['pk']},
+            tipo TEXT NOT NULL,
+            fonte TEXT NOT NULL,
+            sul {t['real']} NOT NULL,
+            oeste {t['real']} NOT NULL,
+            norte {t['real']} NOT NULL,
+            leste {t['real']} NOT NULL,
+            parametros_json TEXT,
+            recebidos INTEGER NOT NULL DEFAULT 0,
+            criado_em {t['ts']} DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
     ]
 
 

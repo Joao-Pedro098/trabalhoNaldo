@@ -153,6 +153,13 @@
                     </button>
                 </div>
 
+                <!-- Importações registradas -->
+                <div class="hidden" id="importacoes-box">
+                    <h2 class="section-title">Importações recentes</h2>
+                    <small class="form-hint">Clique para ver a área consultada no mapa.</small>
+                    <ul class="importacoes-lista" id="importacoes-lista"></ul>
+                </div>
+
                 <!-- Fontes de falhas -->
                 <div class="hidden" id="fontes-falhas-box">
                     <h2 class="section-title">Fontes de falhas</h2>
@@ -164,12 +171,15 @@
             <section class="panel-view hidden" id="view-analise">
                 <h2 class="section-title">Nova análise</h2>
                 <form class="form-card" id="form-analise">
-                    <div class="form-area">
-                        <i class="fa-regular fa-square"></i>
-                        <div>
-                            <strong>Área de estudo: área visível do mapa</strong>
-                            <small id="bbox-analise-texto">--</small>
-                        </div>
+                    <div class="area-escolha" role="radiogroup" aria-label="Área de estudo">
+                        <label class="area-opcao">
+                            <input type="radio" name="an-area" value="importada" checked>
+                            <span><strong>Área importada</strong><small>Exatamente onde os sismos foram buscados (recomendado)</small></span>
+                        </label>
+                        <label class="area-opcao">
+                            <input type="radio" name="an-area" value="visivel">
+                            <span><strong>Área visível do mapa</strong><small id="bbox-analise-texto">--</small></span>
+                        </label>
                     </div>
                     <div class="form-row">
                         <label>Profundidade máxima
@@ -233,6 +243,13 @@
                     </div>
                     <p class="res-meta" id="res-meta"></p>
                     <ul class="avisos hidden" id="res-avisos"></ul>
+
+                    <div class="exportar" id="res-exportar">
+                        <span>Exportar:</span>
+                        <a class="btn-chip" id="exp-csv" download title="Uma linha por epicentro (Excel: separador ; e vírgula decimal)"><i class="fa-solid fa-file-csv"></i> CSV</a>
+                        <a class="btn-chip" id="exp-geojson" download title="Epicentros, ligações até a falha e área de estudo (QGIS)"><i class="fa-solid fa-map"></i> GeoJSON</a>
+                        <a class="btn-chip" id="exp-json" download title="Resultado completo da análise"><i class="fa-solid fa-code"></i> JSON</a>
+                    </div>
 
                     <h3 class="sub-title">Eventos perto das falhas</h3>
                     <small class="form-hint">Clique numa linha para ver a zona no mapa.</small>

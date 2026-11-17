@@ -25,7 +25,7 @@ class SistemaModelo:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            f"SELECT id, nome, parametros_json, criado_em FROM analises ORDER BY id DESC LIMIT {ph()}",
+            f"SELECT id, nome, parametros_json, resultado_json, criado_em FROM analises ORDER BY id DESC LIMIT {ph()}",
             (limite,),
         )
         linhas = cursor.fetchall()
@@ -35,9 +35,23 @@ class SistemaModelo:
         for linha in linhas:
             item = dict(linha)
             item["parametros"] = json.loads(item.pop("parametros_json") or "{}")
+            r = json.loads(item.pop("resultado_json") or "{}")
+            item.update(conclusao=r.get("conclusao"), conclusao_titulo=r.get("conclusao_titulo"),
+                        n_epicentros=r.get("n_epicentros"), n_falhas=r.get("n_falhas"),
+                        p_valor=(r.get("teste_mediana") or {}).get("p_valor"))
             item["criado_em"] = str(item["criado_em"])
             analises.append(item)
         return analises
+
+    @staticmethod
+    def apagar_analise(analise_id: int) -> bool:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(f"DELETE FROM analises WHERE id = {ph()}", (analise_id,))
+        apagou = cursor.rowcount > 0
+        conn.commit()
+        conn.close()
+        return apagou
 
     @staticmethod
     def limpar_analises() -> None:

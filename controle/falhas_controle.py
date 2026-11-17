@@ -8,6 +8,7 @@ from modelo.falha import FalhaModelo
 from modelo.fontes import arquivo_falhas, gem
 from modelo.fontes.geometria import ErroArquivo
 from modelo.fontes.usgs import ErroFonte
+from modelo.importacao import ImportacaoModelo
 
 TAMANHO_MAX_FONTE = 80
 
@@ -30,6 +31,7 @@ class FalhasControle:
         except ErroFonte as e:
             return resposta_erro(str(e), status=502)
 
+        ImportacaoModelo.registrar("falhas", gem.FONTE, bbox, None, len(registros))
         if not registros:
             return resposta_sucesso(
                 {"novos": 0, "atualizados": 0, "recebidos": 0},
@@ -59,6 +61,9 @@ class FalhasControle:
             return resposta_erro(str(e))
 
         resultado = FalhaModelo.salvar_lote(registros)
+        extensao = {"sul": min(r["min_lat"] for r in registros), "norte": max(r["max_lat"] for r in registros),
+                    "oeste": min(r["min_lon"] for r in registros), "leste": max(r["max_lon"] for r in registros)}
+        ImportacaoModelo.registrar("falhas", fonte, extensao, {"arquivo": arquivo.filename}, len(registros))
         resultado.update(recebidos=len(registros), ignoradas=ignoradas, fonte=fonte)
         msg = (f"{_plural(len(registros), 'falha lida', 'falhas lidas')} de '{fonte}': "
                f"{resultado['novos']} novas, {resultado['atualizados']} já existiam.")

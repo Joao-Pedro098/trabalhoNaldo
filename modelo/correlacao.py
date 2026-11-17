@@ -120,12 +120,14 @@ class IndiceFalhas:
 
 def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
              buffers_km: Sequence[float] = (5, 10, 20, 50), n_simulacoes: int = 999,
-             semente: int = 42) -> Dict:
+             semente: int = 42, cobertura_importada: Optional[float] = None) -> Dict:
     """Roda a análise completa.
 
     epicentros: [{id, lat, lon, magnitude, profundidade_km}, ...] (dentro da área)
     falhas:     [{id, nome, tipo, categoria, geometria (GeoJSON linha)}, ...]
     bbox:       {sul, oeste, norte, leste} — área de estudo (hipótese nula)
+    cobertura_importada: fração da área com sismos importados (registro de importações);
+                         None quando desconhecida -> usa uma estimativa pela extensão dos eventos.
     """
     if len(epicentros) < 10:
         raise ErroAnalise(f"São necessários pelo menos 10 epicentros na área (há {len(epicentros)}).")
@@ -240,7 +242,12 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
     fim_xy = shapely.get_coordinates(linhas)[1::2]
     fim_lon, fim_lat = projetor_inverso.transform(fim_xy[:, 0], fim_xy[:, 1])
     por_epicentro = [
-        {"id": epicentros[i].get("id"), "dist_km": round(float(dist_obs[i]), 3), "falha_id": dono[i],
+        {"id": epicentros[i].get("id"), "id_externo": epicentros[i].get("id_externo"),
+         "data_hora": epicentros[i].get("data_hora"),
+         "lat": float(lat[i]), "lon": float(lon[i]),
+         "magnitude": epicentros[i].get("magnitude"), "profundidade_km": epicentros[i].get("profundidade_km"),
+         "dist_km": round(float(dist_obs[i]), 3), "falha_id": dono[i],
+         "falha_nome": info_falha[dono[i]].get("nome"),
          "ponto_falha": [round(float(fim_lat[i]), 5), round(float(fim_lon[i]), 5)]}
         for i in range(n)
     ]
@@ -254,15 +261,23 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         avisos.append(f"Área grande ({extensao_km:,.0f} km): a projeção local distorce as distâncias nas bordas.".replace(",", "."))
     if n < 30:
         avisos.append(f"Poucos epicentros ({n}): o teste tem pouco poder estatístico.")
-    # Se os eventos ocupam só parte da área, os pontos aleatórios caem onde não houve
-    # coleta de dados (ex.: área de estudo maior que a importada) e a comparação fica enviesada.
-    cobertura = area_bbox_km2({"sul": float(lat.min()), "norte": float(lat.max()),
-                               "oeste": float(lon.min()), "leste": float(lon.max())}) / area_bbox_km2(bbox)
-    if cobertura < 0.25:
-        avisos.append(
-            f"Os epicentros ocupam só {round(100 * cobertura)}% da área de estudo. Se a área for maior que a "
-            "região onde os sismos foram importados, os pontos aleatórios caem onde não há dados e o resultado "
-            "fica enviesado: ajuste o mapa à área importada.")
+    # Se parte da área não teve sismos importados, os pontos aleatórios caem onde não há
+    # dados e a comparação fica enviesada.
+    if cobertura_importada is not None:
+        if cobertura_importada < 0.95:
+            avisos.append(
+                f"Só {round(100 * cobertura_importada)}% da área de estudo teve sismos importados. Os pontos "
+                "aleatórios caem também onde não há dados, o que enviesa o resultado: use a opção "
+                "'Área importada' ou importe sismos no restante da área.")
+    else:
+        # Sem registro de importação: estima pela extensão ocupada pelos próprios eventos
+        cobertura = area_bbox_km2({"sul": float(lat.min()), "norte": float(lat.max()),
+                                   "oeste": float(lon.min()), "leste": float(lon.max())}) / area_bbox_km2(bbox)
+        if cobertura < 0.25:
+            avisos.append(
+                f"Os epicentros ocupam só {round(100 * cobertura)}% da área de estudo. Se a área for maior que a "
+                "região onde os sismos foram importados, os pontos aleatórios caem onde não há dados e o resultado "
+                "fica enviesado: ajuste o mapa à área importada.")
 
     distancias_obs = _resumo(dist_obs)
     distancias_ale = _resumo(dist_pool)
@@ -291,6 +306,7 @@ def analisar(epicentros: Sequence[Dict], falhas: Sequence[Dict], bbox: Dict,
         "ranking_falhas": lista_ranking[:TOP_FALHAS],
         "por_epicentro": por_epicentro,
         "avisos": avisos,
+        "cobertura_importada_pct": None if cobertura_importada is None else round(100 * cobertura_importada, 1),
     }
     codigo, texto = interpretar(resultado)
     resultado.update(conclusao=codigo, conclusao_titulo=CONCLUSOES[codigo], interpretacao=texto)

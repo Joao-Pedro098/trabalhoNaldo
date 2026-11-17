@@ -7,6 +7,7 @@ from db.database import get_db_connection, is_using_postgres, ph
 from modelo import correlacao
 from modelo.epicentro import EpicentroModelo
 from modelo.falha import FalhaModelo
+from modelo.importacao import ImportacaoModelo
 
 LIMITE_EPICENTROS = 50_000
 KM_POR_GRAU_LAT = 111.32
@@ -48,7 +49,9 @@ class AnaliseModelo:
         # Falhas logo fora da área também contam como "a mais próxima"
         falhas = FalhaModelo.para_analise(expandir_bbox(bbox, max(buffers_km)), fontes_falhas)
 
-        resultado = correlacao.analisar(epicentros, falhas, bbox, buffers_km, n_simulacoes, semente)
+        cobertura = ImportacaoModelo.cobertura("epicentros", bbox)
+        resultado = correlacao.analisar(epicentros, falhas, bbox, buffers_km, n_simulacoes, semente,
+                                        cobertura_importada=cobertura)
         if n_sem_prof:
             resultado["avisos"].append(f"{n_sem_prof} epicentros sem profundidade foram excluídos pelo filtro de profundidade.")
 

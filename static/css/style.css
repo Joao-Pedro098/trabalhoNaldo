@@ -612,6 +612,88 @@ html, body {
 .history-item { cursor: pointer; transition: border-color 0.15s; }
 .history-item:hover, .history-item:focus { border-color: var(--accent); outline: none; }
 
+/* ==========================================================
+   FASE 5: área de estudo, exportação, histórico, importações
+   ========================================================== */
+.area-escolha { display: flex; flex-direction: column; gap: 6px; }
+
+.area-opcao {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.area-opcao:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.area-opcao input { margin-top: 2px; accent-color: var(--accent); }
+.area-opcao strong { display: block; font-weight: 500; }
+.area-opcao small { color: var(--texto-2); font-variant-numeric: tabular-nums; }
+
+.exportar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    font-size: 12px;
+    color: var(--texto-2);
+    margin: 4px 0 6px;
+}
+
+.btn-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--borda);
+    border-radius: 14px;
+    color: var(--texto);
+    text-decoration: none;
+    font-size: 12px;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-chip:hover { border-color: var(--accent); color: var(--accent); }
+.btn-chip i { color: var(--texto-3); }
+
+.history-item-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+.history-item .btn-icon-danger { width: 26px; height: 26px; margin: -4px -6px 0 0; }
+
+.tag-conclusao {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 11px;
+    padding: 1px 8px;
+    border-radius: 10px;
+    border: 1px solid;
+}
+
+.tag-conclusao.positiva { background: #e6f4ea; border-color: #b7dfc3; color: #137333; }
+.tag-conclusao.parcial { background: #fef7e0; border-color: #f6dd9a; color: #8a5a00; }
+.tag-conclusao.neutra { background: var(--fundo); border-color: #e0e0e0; color: var(--texto-2); }
+
+.importacoes-lista { list-style: none; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+
+.importacoes-lista li {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    border: 1px solid #e6e6e6;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.importacoes-lista li:hover, .importacoes-lista li:focus { border-color: var(--accent); outline: none; }
+.importacoes-lista li > i { color: var(--accent); margin-top: 2px; }
+.importacoes-lista strong { display: block; font-weight: 500; }
+.importacoes-lista small { color: var(--texto-2); }
+
 /* Legenda do mapa */
 .map-legend {
     background: rgba(255, 255, 255, 0.95);

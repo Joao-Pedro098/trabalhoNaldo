@@ -17,13 +17,15 @@ sismoFalhas/
 │   ├── analise_controle.py    # Validação e execução da análise de correlação
 │   └── respostas.py           # Respostas JSON padronizadas {sucesso, ...}
 ├── db/
-│   └── database.py            # PostgreSQL ou SQLite; tabelas epicentros, falhas, analises
+│   └── database.py            # PostgreSQL ou SQLite; tabelas epicentros, falhas, analises, importacoes
 ├── modelo/                    # MODEL
 │   ├── geocodificacao.py      # Nominatim (busca/reverso) e localização por IP
 │   ├── epicentro.py           # Persistência e consultas de epicentros
 │   ├── falha.py               # Persistência, consulta e categoria (mecanismo) das falhas
 │   ├── correlacao.py          # MOTOR: distâncias, Monte Carlo, buffers, KS, ranking (sem banco)
 │   ├── analise.py             # Carrega dados do banco, roda o motor e salva a análise
+│   ├── importacao.py          # Registro das áreas importadas e cálculo de cobertura
+│   ├── exportacao.py          # CSV (Excel pt-BR), GeoJSON (QGIS) e JSON da análise
 │   ├── fontes/usgs.py         # Cliente do catálogo FDSN da USGS
 │   ├── fontes/gem.py          # Base mundial de falhas ativas do GEM (com cache local)
 │   ├── fontes/arquivo_falhas.py # Leitura de GeoJSON e shapefile (.zip) enviados
@@ -60,7 +62,10 @@ sismoFalhas/
 | POST | `/api/analise` | Roda a análise (ver parâmetros abaixo) e salva |
 | GET | `/api/analises/<id>` | Resultado completo de uma análise salva |
 | GET | `/api/analises/<id>/buffer?km=` | Zona a até `km` das falhas da análise (GeoJSON, recortada à área) |
-| GET / DELETE | `/api/analises` | Lista / apaga análises salvas |
+| DELETE | `/api/analises/<id>` | Apaga uma análise |
+| GET | `/api/analises/<id>/exportar?formato=csv\|geojson\|json` | Download do resultado |
+| GET | `/api/importacoes?tipo=epicentros\|falhas` | Áreas consultadas em cada importação |
+| GET / DELETE | `/api/analises` | Lista (com conclusão) / apaga todas as análises |
 
 ## 🗺️ Roteiro
 
@@ -71,7 +76,7 @@ sismoFalhas/
 | 2 | Importação de falhas (GEM / upload GeoJSON e shapefile) | ✅ |
 | 3 | Motor de correlação (distância, buffer, Monte Carlo, KS) | ✅ |
 | 4 | Interface de análise (área, gráficos, mapa de calor) | ✅ |
-| 5 | Análises salvas e exportação CSV/GeoJSON | ⏳ |
+| 5 | Análises salvas e exportação CSV/GeoJSON | ✅ |
 | 6 | Acabamento, dados de demonstração offline | ⏳ |
 
 ---
@@ -119,7 +124,7 @@ sismoFalhas/
 
 6. **Complementos:** teste KS (diferença de *forma* entre as distribuições — informativo, não entra na conclusão), Spearman magnitude × distância, ranking das falhas (eventos, magnitude máxima, energia `log E = 1,5M + 4,8`, eventos por 100 km), histograma observado × esperado e, por epicentro, a distância e o ponto mais próximo na falha.
 
-**Parâmetros de `POST /api/analise`:** `bbox` (obrigatório), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
+**Parâmetros de `POST /api/analise`:** `bbox` (obrigatório), `area` (`"importada"` usa a caixa exata das importações de sismos que cruzam `bbox`), `buffers_km`, `n_simulacoes` (99–9999), `min_mag`, `prof_max_km`, `inicio`, `fim`, `fontes_falhas`, `semente`, `nome`, `salvar`.
 
 > 💡 **Profundidade importa.** Falhas mapeadas são traços em superfície. Em zonas de subducção, sismos profundos ocorrem no plano inclinado, dezenas a centenas de km do traço. Use `prof_max_km` (ex.: 35) para analisar só a sismicidade crustal rasa.
 
@@ -131,6 +136,19 @@ sismoFalhas/
 - **Camada "Densidade (calor)"** no seletor de camadas (Leaflet.heat, peso pela magnitude).
 - **Histórico:** clicar numa análise salva reabre o resultado e enquadra a área.
 - **Avisos:** poucos eventos, área grande e quando os epicentros ocupam só uma pequena parte da área de estudo (sinal de área maior que a importada, o que enviesa a hipótese nula).
+
+## 💾 Importações, histórico e exportação (Fase 5)
+
+- **Registro de importações:** cada importação (USGS, GEM ou arquivo) guarda a área consultada, os filtros e a quantidade recebida. A aba Dados lista as recentes; clicar mostra a área no mapa.
+- **Área de estudo = área importada (padrão):** a análise usa exatamente a caixa onde os sismos foram buscados. Assim os pontos aleatórios da hipótese nula só caem onde de fato houve coleta.
+- **Cobertura:** toda análise informa que % da área de estudo teve sismos importados (cálculo exato na esfera); abaixo de 95% aparece um aviso. Dados importados antes do registro usam uma estimativa.
+- **Exportar** (no resultado):
+  - **CSV** — uma linha por epicentro: id, data, coordenadas, magnitude, profundidade, distância, falha mais próxima e o ponto nela. Formato Excel pt-BR (`;`, vírgula decimal, UTF-8 com BOM).
+  - **GeoJSON** — epicentros, linhas até a falha e a área de estudo, para abrir no QGIS.
+  - **JSON** — o resultado completo.
+- **Histórico:** mostra a conclusão de cada análise; cada uma pode ser apagada individualmente.
+
+> Exemplo real (Coquimbo, sismos ≤ 35 km): com uma área 36% maior que a importada, o resultado era "mais perto, mas sem excesso"; com a área importada exata, passa a **associação significativa** (11,0% dos eventos a até 50 km de uma falha, contra 7,4% esperados; p ajustado = 0,016). A escolha da área muda a conclusão — por isso ela é registrada.
 
 ## 🚀 Como executar
 

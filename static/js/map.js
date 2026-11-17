@@ -122,6 +122,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 resumoEl.classList.add('hidden');
             }
             carregarFontesFalhas();
+            carregarImportacoes();
         } catch (e) {
             showAlert(`Não foi possível consultar o banco: ${e.message}`);
         }
@@ -375,6 +376,42 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // Áreas consultadas em cada importação (desenhadas sob demanda)
+    const camadaImportacao = L.layerGroup().addTo(map);
+    async function carregarImportacoes() {
+        try {
+            const data = await api('/api/importacoes');
+            const lista = $('importacoes-lista');
+            $('importacoes-box').classList.toggle('hidden', data.importacoes.length === 0);
+            lista.innerHTML = '';
+            data.importacoes.slice(0, 8).forEach(imp => {
+                const b = imp.bbox;
+                const li = document.createElement('li');
+                li.tabIndex = 0;
+                const icone = imp.tipo === 'epicentros' ? 'fa-circle-dot' : 'fa-wave-square';
+                const filtros = imp.tipo === 'epicentros' && imp.parametros.inicio
+                    ? ` · ${imp.parametros.inicio.slice(0, 4)}–${imp.parametros.fim.slice(0, 4)} · M ≥ ${imp.parametros.min_mag}` : '';
+                li.innerHTML = `<i class="fa-solid ${icone}"></i>
+                    <span><strong>${escapeHtml(imp.fonte)} · ${imp.recebidos.toLocaleString('pt-BR')} ${imp.tipo}</strong>
+                    <small>${escapeHtml(imp.criado_em.slice(0, 16))}${filtros}</small></span>`;
+                const ver = () => {
+                    camadaImportacao.clearLayers();
+                    const limites = [[b.sul, b.oeste], [b.norte, b.leste]];
+                    L.rectangle(limites, { color: '#202124', weight: 1.5, dashArray: '2 5', fillOpacity: 0.04, interactive: false })
+                        .addTo(camadaImportacao);
+                    const { esquerda, topo } = areaCobertaPeloPainel();
+                    map.flyToBounds(limites, { paddingTopLeft: [esquerda + 30, topo + 30], paddingBottomRight: [30, 30] });
+                    setTimeout(() => camadaImportacao.clearLayers(), 8000);
+                };
+                li.addEventListener('click', ver);
+                li.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') ver(); });
+                lista.appendChild(li);
+            });
+        } catch (e) {
+            showAlert(e.message);
+        }
+    }
+
     async function carregarFontesFalhas() {
         try {
             const data = await api('/api/falhas/fontes');
@@ -616,16 +653,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 lista.innerHTML = '<p class="empty-state">Nenhuma análise salva ainda.</p>';
                 return;
             }
+            const CLASSE_CONCLUSAO = {
+                associacao: 'positiva', excesso_local: 'positiva', proximidade_sem_excesso: 'parcial'
+            };
             lista.innerHTML = itens.map(a => `
                 <div class="history-item" data-id="${a.id}" role="button" tabindex="0">
-                    <div class="history-item-route">${escapeHtml(a.nome || `Análise #${a.id}`)}</div>
-                    <div class="history-item-meta"><span>#${a.id}</span><span>${escapeHtml(a.criado_em.split(' ')[0])}</span></div>
+                    <div class="history-item-topo">
+                        <div class="history-item-route">${escapeHtml(a.nome || `Análise #${a.id}`)}</div>
+                        <button class="btn-icon-danger" data-apagar="${a.id}" title="Apagar esta análise"><i class="fa-regular fa-trash-can"></i></button>
+                    </div>
+                    ${a.conclusao_titulo ? `<span class="tag-conclusao ${CLASSE_CONCLUSAO[a.conclusao] || 'neutra'}">${escapeHtml(a.conclusao_titulo)}</span>` : ''}
+                    <div class="history-item-meta">
+                        <span>#${a.id}${a.n_epicentros != null ? ` · ${a.n_epicentros} eventos · ${a.n_falhas} falhas` : ''}</span>
+                        <span>${escapeHtml(a.criado_em.split(' ')[0])}</span>
+                    </div>
                 </div>`).join('');
             lista.querySelectorAll('.history-item').forEach(el => {
                 const abrir = () => ganchos.abrirAnalise?.(Number(el.dataset.id));
                 el.addEventListener('click', abrir);
-                el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') abrir(); });
+                el.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && ev.target === el) abrir(); });
             });
+            lista.querySelectorAll('[data-apagar]').forEach(btn => btn.addEventListener('click', async (ev) => {
+                ev.stopPropagation(); // não abre a análise
+                if (!confirm(`Apagar a análise #${btn.dataset.apagar}? Esta ação não pode ser desfeita.`)) return;
+                try {
+                    await api(`/api/analises/${btn.dataset.apagar}`, { method: 'DELETE' });
+                    carregarHistorico();
+                } catch (e) {
+                    showAlert(e.message);
+                }
+            }));
         } catch (e) {
             showAlert(e.message);
         }

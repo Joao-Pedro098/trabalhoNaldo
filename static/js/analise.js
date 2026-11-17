@@ -97,6 +97,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const corpo = {
             bbox,
+            // 'importada': o servidor usa a caixa exata das importações que cruzam a área visível
+            area: document.querySelector('input[name="an-area"]:checked').value,
             buffers_km: buffers,
             n_simulacoes: Number($('an-sims').value),
             prof_max_km: $('an-prof').value || null,
@@ -155,8 +157,15 @@ document.addEventListener('DOMContentLoaded', () => {
             p.min_mag != null ? `M ≥ ${br(p.min_mag)}` : null,
             p.inicio || p.fim ? `${p.inicio || '…'} a ${p.fim || '…'}` : null
         ].filter(Boolean).join(' · ');
+        const cobertura = r.cobertura_importada_pct != null ? ` · ${br(r.cobertura_importada_pct, 0)}% da área com sismos importados` : '';
         $('res-meta').textContent = `${r.n_epicentros.toLocaleString('pt-BR')} epicentros · ${r.n_falhas} falhas · ` +
-            `${filtros} · ${p.n_simulacoes} simulações · área ${Math.round(r.area_km2).toLocaleString('pt-BR')} km²`;
+            `${filtros} · ${p.n_simulacoes} simulações · área ${Math.round(r.area_km2).toLocaleString('pt-BR')} km²${cobertura}`;
+
+        // Exportação (só para análises salvas)
+        $('res-exportar').classList.toggle('hidden', !r.id);
+        if (r.id) {
+            ['csv', 'geojson', 'json'].forEach(f => { $(`exp-${f}`).href = `/api/analises/${r.id}/exportar?formato=${f}`; });
+        }
 
         const avisos = $('res-avisos');
         avisos.innerHTML = (r.avisos || []).map(a => `<li><i class="fa-solid fa-triangle-exclamation"></i> ${escapeHtml(a)}</li>`).join('');

@@ -93,6 +93,21 @@ def obter_analise(analise_id):
     return AnaliseControle.obter(analise_id)
 
 
+@rotas_bp.route("/api/analises/<int:analise_id>", methods=["DELETE"])
+def apagar_analise(analise_id):
+    return AnaliseControle.apagar(analise_id)
+
+
+@rotas_bp.route("/api/analises/<int:analise_id>/exportar", methods=["GET"])
+def exportar_analise(analise_id):
+    return AnaliseControle.exportar(analise_id)
+
+
+@rotas_bp.route("/api/importacoes", methods=["GET"])
+def listar_importacoes():
+    return AnaliseControle.importacoes()
+
+
 @rotas_bp.route("/api/analises/<int:analise_id>/buffer", methods=["GET"])
 def zona_buffer_analise(analise_id):
     return AnaliseControle.zona_buffer(analise_id)

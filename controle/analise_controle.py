@@ -1,9 +1,12 @@
-from flask import request
+from flask import Response, request
 
 from controle.epicentros_controle import ErroValidacao, ler_bbox, ler_data, ler_magnitude
 from controle.respostas import resposta_erro, resposta_sucesso
+from modelo import exportacao
 from modelo.analise import AnaliseModelo
 from modelo.correlacao import ErroAnalise
+from modelo.importacao import ImportacaoModelo
+from modelo.sistema import SistemaModelo
 
 BUFFERS_PADRAO = [5, 10, 20, 50]
 
@@ -41,6 +44,12 @@ class AnaliseControle:
         dados = request.get_json(silent=True) or {}
         try:
             bbox = ler_bbox(dados.get("bbox") or {})
+            if dados.get("area") == "importada":
+                # Área exata das importações de sismos que cruzam a área visível
+                bbox = ImportacaoModelo.area_importada("epicentros", bbox)
+                if bbox is None:
+                    raise ErroValidacao("Nenhuma importação de sismos registrada nesta região. "
+                                        "Importe sismos ou use a área visível.")
             fontes = dados.get("fontes_falhas") or None
             if fontes is not None and not (isinstance(fontes, list) and all(isinstance(f, str) for f in fontes)):
                 raise ErroValidacao("'fontes_falhas' deve ser uma lista de nomes de fonte.")
@@ -78,6 +87,35 @@ class AnaliseControle:
         if zona is None:
             return resposta_erro("Análise não encontrada.", status=404)
         return resposta_sucesso(zona)
+
+    @staticmethod
+    def exportar(analise_id: int):
+        formato = request.args.get("formato", "csv")
+        resultado = AnaliseModelo.obter(analise_id)
+        if resultado is None:
+            return resposta_erro("Análise não encontrada.", status=404)
+        if formato == "csv":
+            corpo, tipo, ext = exportacao.csv_epicentros(resultado), "text/csv; charset=utf-8", "csv"
+        elif formato == "geojson":
+            corpo, tipo, ext = exportacao.geojson_texto(resultado), "application/geo+json; charset=utf-8", "geojson"
+        elif formato == "json":
+            corpo, tipo, ext = exportacao.json_completo(resultado), "application/json; charset=utf-8", "json"
+        else:
+            return resposta_erro("Formato inválido: use csv, geojson ou json.")
+        nome = exportacao.nome_arquivo(resultado, ext)
+        return Response(corpo, mimetype=tipo.split(";")[0], headers={
+            "Content-Type": tipo, "Content-Disposition": f'attachment; filename="{nome}"'})
+
+    @staticmethod
+    def apagar(analise_id: int):
+        if not SistemaModelo.apagar_analise(analise_id):
+            return resposta_erro("Análise não encontrada.", status=404)
+        return resposta_sucesso(mensagem="Análise apagada.")
+
+    @staticmethod
+    def importacoes():
+        tipo = request.args.get("tipo") or None
+        return resposta_sucesso({"importacoes": ImportacaoModelo.listar(tipo)})
 
     @staticmethod
     def obter(analise_id: int):
