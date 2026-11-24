@@ -36,7 +36,7 @@ if __name__ == "__main__":
     porta = int(os.getenv("PORT", "5000"))
     debug = os.getenv("FLASK_DEBUG", "0") == "1"
     print("=" * 60)
-    print("SismoFalhas - correlacao entre falhas e epicentros")
+    print("Falha Viva - correlacao entre falhas e epicentros")
     print(f"Banco: {nome_backend()}")
     print(f"Acesse: http://localhost:{porta} (ou http://<IP-da-VM>:{porta})")
     print("=" * 60)

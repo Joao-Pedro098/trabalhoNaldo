@@ -1,7 +1,7 @@
 def test_pagina_principal(cliente):
     resp = cliente.get("/")
     assert resp.status_code == 200
-    assert b"SismoFalhas" in resp.data
+    assert b"Falha Viva" in resp.data
 
 
 def test_status_tabelas_vazias(cliente):

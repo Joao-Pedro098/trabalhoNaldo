@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================================
-# Instalação do SismoFalhas no Ubuntu Server
+# Instalação do Falha Viva no Ubuntu Server
 #
 #   ./setup_vm.sh            instala dependências e o ambiente virtual
 #   ./setup_vm.sh --demo     ... e carrega os dados de demonstração (Coquimbo)
@@ -56,7 +56,7 @@ if [ "$SERVICO" = "1" ]; then
     SECRET=$(./venv/bin/python3 -c 'import secrets; print(secrets.token_hex(32))')
     sudo tee /etc/systemd/system/sismofalhas.service > /dev/null <<EOF
 [Unit]
-Description=SismoFalhas - correlacao entre falhas e epicentros
+Description=Falha Viva - correlacao entre falhas e epicentros
 After=network.target
 
 [Service]

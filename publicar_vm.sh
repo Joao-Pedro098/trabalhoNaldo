@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==========================================================
-# Publica o SismoFalhas na internet a partir da VM (Ubuntu Server)
+# Publica o Falha Viva na internet a partir da VM (Ubuntu Server)
 #
 #   sudo ./publicar_vm.sh          cria os serviços e mostra o link público
 #   ./publicar_vm.sh --link        só mostra o link público atual
@@ -84,7 +84,7 @@ echo ">>> [2/3] Criando o serviço do sistema (sismofalhas)..."
 SECRET=$("$DIR/venv/bin/python3" -c 'import secrets; print(secrets.token_hex(32))')
 cat > /etc/systemd/system/sismofalhas.service <<EOF
 [Unit]
-Description=SismoFalhas - correlacao entre falhas e epicentros
+Description=Falha Viva - correlacao entre falhas e epicentros
 After=network-online.target
 Wants=network-online.target
 
@@ -104,7 +104,7 @@ EOF
 echo ">>> [3/3] Criando o serviço do túnel público (sismofalhas-tunel)..."
 cat > /etc/systemd/system/sismofalhas-tunel.service <<EOF
 [Unit]
-Description=SismoFalhas - tunel publico Cloudflare
+Description=Falha Viva - tunel publico Cloudflare
 After=network-online.target sismofalhas.service
 Wants=network-online.target
 Requires=sismofalhas.service
@@ -118,6 +118,19 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 EOF
+
+echo ">>> Mostrando o IP da VM na tela de login (janela do VirtualBox)..."
+# \4 = IPv4 atual da VM; o agetty atualiza sozinho quando o IP muda.
+mkdir -p /etc/issue.d
+cat > /etc/issue.d/sismofalhas.issue <<EOF
+  ================================================
+   Falha Viva - IP desta VM:  \4
+   Entrar pelo Windows:  ssh ${USUARIO}@\4
+   Link publico:  ~/SismoFalhas/publicar_vm.sh --link
+  ================================================
+
+EOF
+agetty --reload 2>/dev/null || true
 
 systemctl daemon-reload
 systemctl enable sismofalhas sismofalhas-tunel

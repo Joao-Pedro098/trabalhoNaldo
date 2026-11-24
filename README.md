@@ -1,4 +1,4 @@
-# 🌋 SismoFalhas — Correlação espacial entre falhas mapeadas e epicentros registrados
+# 🌋 Falha Viva — Correlação espacial entre falhas mapeadas e epicentros registrados
 
 Sistema web que cruza **falhas geológicas mapeadas** com **epicentros de sismos registrados** e responde, com teste estatístico, à pergunta:
 
