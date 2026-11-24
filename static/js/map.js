@@ -519,22 +519,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const AREA_GRANDE_GRAUS = 20;
-    $('btn-demo').addEventListener('click', () => {
-        comCarregamento($('btn-demo'), '', async () => {
-            const data = await api('/api/demo', { method: 'POST' });
-            showAlert(data.mensagem, 'info');
-            const b = data.bbox;
-            const { esquerda, topo } = areaCobertaPeloPainel();
-            map.flyToBounds([[b.sul, b.oeste], [b.norte, b.leste]],
-                { paddingTopLeft: [esquerda + 30, topo + 30], paddingBottomRight: [30, 30] });
-            await carregarStatus();
-        });
-    });
-
     const DICAS_FONTE = {
         usgs: ['Importar da USGS', 'Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.'],
         usp: ['Importar da USP', 'Rede Sismográfica Brasileira: sismos do Brasil desde 1724. Muitos têm profundidade não determinada.']
     };
+    // Campo inválido dentro de uma seção recolhida: abre a seção para o navegador
+    // conseguir mostrar a mensagem (senão o envio é bloqueado sem aviso).
+    document.addEventListener('invalid', (e) => {
+        let d = e.target.closest('details');
+        while (d) { d.open = true; d = d.parentElement.closest('details'); }
+    }, true);
+
+    // Seletor da fonte de falhas (GEM / SGB / arquivo): mostra um painel por vez
+    document.querySelectorAll('[data-fonte-falha]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const fonte = btn.dataset.fonteFalha;
+            document.querySelectorAll('[data-fonte-falha]').forEach((b) => b.classList.toggle('ativo', b === btn));
+            document.querySelectorAll('[data-fonte-painel]').forEach((p) => p.classList.toggle('hidden', p.dataset.fontePainel !== fonte));
+        });
+    });
+
     $('imp-mundo').addEventListener('change', (e) => {
         $('bbox-texto').textContent = e.target.checked ? 'Mundo inteiro' : '';
         if (!e.target.checked) atualizarTextoBbox();

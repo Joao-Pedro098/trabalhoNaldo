@@ -327,6 +327,7 @@ html, body {
 
 .form-row label {
     flex: 1;
+    min-width: 0;            /* nomes longos de catálogo não empurram o campo vizinho */
     display: flex;
     flex-direction: column;
     gap: 4px;
@@ -720,6 +721,118 @@ html, body {
 .check-linha { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; color: var(--texto-2); cursor: pointer; }
 .check-linha input { margin-top: 2px; accent-color: var(--accent); }
 .mais-opcoes .check-linha { margin-bottom: 10px; }
+
+/* Seções recolhíveis da aba Dados */
+.sanfona {
+    border: 1px solid #e6e6e6;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    background: var(--painel);
+}
+.sanfona > summary {
+    list-style: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--texto);
+    user-select: none;
+}
+.sanfona > summary::-webkit-details-marker { display: none; }
+.sanfona > summary > i { color: var(--accent); width: 16px; text-align: center; }
+.sanfona > summary small {
+    margin-left: auto;
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--texto-3);
+}
+.sanfona > summary::after {
+    content: "\f078";               /* chevron-down do Font Awesome */
+    font-family: "Font Awesome 6 Free";
+    font-weight: 900;
+    font-size: 10px;
+    color: var(--texto-3);
+    transition: transform .2s;
+}
+.sanfona[open] > summary::after { transform: rotate(180deg); }
+.sanfona[open] > summary { border-bottom: 1px solid #efefef; }
+.sanfona > summary:hover { background: #fafafa; border-radius: 10px; }
+.sanfona-corpo {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.sanfona-corpo .sub-title:first-child { margin-top: 0; }
+
+.sanfona.hidden { display: none; }
+#resultado-analise > .sanfona:first-of-type { margin-top: 4px; }
+
+/* Área de estudo: grade 2×2 compacta */
+.campo-titulo { font-size: 12px; color: var(--texto-2); }
+#form-analise .form-row select { min-width: 0; width: 100%; text-overflow: ellipsis; }
+#form-analise .form-row label:has(#an-prof) { flex: 0 0 34%; }
+#form-analise .area-escolha { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+#form-analise .area-opcao {
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    padding: 9px 8px;
+    text-align: center;
+    color: var(--texto-2);
+    transition: border-color .15s, background .15s;
+}
+#form-analise .area-opcao input { position: absolute; opacity: 0; pointer-events: none; }
+#form-analise .area-opcao i { margin-right: 4px; color: var(--texto-3); }
+#form-analise .area-opcao:has(input:checked) { color: var(--accent); font-weight: 500; }
+#form-analise .area-opcao:has(input:checked) i { color: var(--accent); }
+#form-analise .area-opcao:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
+.area-extra { display: none; }
+#form-analise:has(input[value="territorio"]:checked) .area-extra-territorio,
+#form-analise:has(input[value="visivel"]:checked) .area-extra-visivel { display: block; }
+.area-extra-territorio select {
+    width: 100%;
+    height: 34px;
+    border: 1px solid var(--borda);
+    border-radius: 6px;
+    font-size: 12px;
+    padding: 0 8px;
+    background: var(--painel);
+}
+
+/* Histórico: lixeira discreta, aparece ao passar o mouse */
+@media (hover: hover) {
+    .history-item .btn-icon-danger { opacity: 0; transition: opacity .15s; }
+    .history-item:hover .btn-icon-danger, .history-item:focus-within .btn-icon-danger { opacity: 1; }
+}
+
+.seletor-fonte {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    background: var(--fundo);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 3px;
+}
+.seletor-fonte button {
+    border: 0;
+    background: transparent;
+    border-radius: 6px;
+    padding: 6px 4px;
+    font: inherit;
+    font-size: 12px;
+    color: var(--texto-2);
+    cursor: pointer;
+}
+.seletor-fonte button.ativo {
+    background: var(--painel);
+    color: var(--accent);
+    font-weight: 500;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .12);
+}
 
 /* Cartão de dados de demonstração */
 .demo-card {

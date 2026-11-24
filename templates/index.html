@@ -85,86 +85,7 @@
                         <span class="stat-label">falhas</span>
                     </div>
                 </div>
-                <p class="db-info"><i class="fa-solid fa-database"></i> Banco em uso: <strong id="db-backend">–</strong></p>
                 <p class="db-info hidden" id="epi-resumo"></p>
-
-                <div class="demo-card" id="demo-card">
-                    <i class="fa-solid fa-flask"></i>
-                    <div>
-                        <strong>Dados de demonstração</strong>
-                        <small>Coquimbo, Chile: 984 sismos (USGS) e 13 falhas (GEM). Funciona sem internet.</small>
-                    </div>
-                    <button type="button" class="btn-secondary" id="btn-demo">Carregar</button>
-                </div>
-
-                <!-- Importação de epicentros -->
-                <h2 class="section-title">Importar epicentros</h2>
-                <form class="form-card" id="form-importar">
-                    <div class="form-row">
-                        <label>Catálogo
-                            <select id="imp-fonte">
-                                <option value="usgs">USGS (mundial)</option>
-                                <option value="usp">Centro de Sismologia da USP (Brasil)</option>
-                            </select>
-                        </label>
-                    </div>
-                    <small class="form-hint" id="imp-fonte-dica">Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.</small>
-                    <div class="form-area">
-                        <i class="fa-regular fa-square"></i>
-                        <div>
-                            <strong>Área visível do mapa</strong>
-                            <small id="bbox-texto">--</small>
-                        </div>
-                    </div>
-                    <label class="check-linha"><input type="checkbox" id="imp-mundo"> Mundo inteiro (vale também para GEM e SGB). Na USGS, use M ≥ 5: acima de 20 mil eventos a importação é feita em lotes.</label>
-                    <div class="form-row">
-                        <label>Início<input type="date" id="imp-inicio" required></label>
-                        <label>Fim<input type="date" id="imp-fim" required></label>
-                    </div>
-                    <div class="form-row">
-                        <label>Magnitude mínima<input type="number" id="imp-mag" min="-2" max="10" step="0.1" value="2.5" required></label>
-                    </div>
-                    <button type="submit" class="btn-primary" id="btn-importar">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> <span id="btn-importar-texto">Importar da USGS</span>
-                    </button>
-                    <small class="form-hint">Até 20.000 eventos por importação. Dados repetidos são atualizados, não duplicados.</small>
-                </form>
-
-                <!-- Importação de falhas -->
-                <h2 class="section-title">Importar falhas geológicas</h2>
-                <div class="form-card">
-                    <div class="fonte-opcao">
-                        <strong><i class="fa-solid fa-earth-americas"></i> GEM Global Active Faults</strong>
-                        <small>Base mundial de falhas ativas (Andes, Califórnia, Himalaia...). <b>Não cobre o Brasil.</b> Usa a mesma área visível acima.</small>
-                        <button type="button" class="btn-secondary" id="btn-importar-gem">
-                            <i class="fa-solid fa-cloud-arrow-down"></i> Importar falhas do GEM
-                        </button>
-                    </div>
-                    <hr class="form-sep">
-                    <div class="fonte-opcao">
-                        <strong><i class="fa-solid fa-map-location-dot"></i> SGB — Estruturas do Brasil (1:1.000.000)</strong>
-                        <small>Falhas e zonas de cisalhamento de todo o território (Serviço Geológico do Brasil). Em sua maioria <b>estruturas antigas</b>, não falhas ativas. Usa a área visível; o primeiro download leva ~20 s.</small>
-                        <label class="check-linha"><input type="checkbox" id="sgb-lineamentos"> Incluir lineamentos de foliação (não são falhas)</label>
-                        <button type="button" class="btn-secondary" id="btn-importar-sgb">
-                            <i class="fa-solid fa-cloud-arrow-down"></i> Importar estruturas do SGB
-                        </button>
-                    </div>
-                    <hr class="form-sep">
-                    <form class="fonte-opcao" id="form-upload">
-                        <strong><i class="fa-solid fa-file-arrow-up"></i> Enviar arquivo</strong>
-                        <small>GeoJSON ou shapefile em .zip (ex.: falhas do SGB/CPRM), em coordenadas geográficas (WGS84 / SIRGAS 2000).</small>
-                        <label class="file-input">
-                            <input type="file" id="upload-arquivo" accept=".geojson,.json,.zip" required>
-                            <span id="upload-nome"><i class="fa-regular fa-folder-open"></i> Escolher arquivo...</span>
-                        </label>
-                        <div class="form-row">
-                            <label>Nome da fonte<input type="text" id="upload-fonte" maxlength="80" placeholder="ex.: SGB - Falhas RN"></label>
-                        </div>
-                        <button type="submit" class="btn-secondary" id="btn-upload">
-                            <i class="fa-solid fa-upload"></i> Enviar falhas
-                        </button>
-                    </form>
-                </div>
 
                 <!-- Exibição -->
                 <h2 class="section-title">Exibição no mapa</h2>
@@ -176,81 +97,159 @@
                     <label class="check-linha"><input type="checkbox" id="filtro-brasil"> Mostrar só os sismos dentro do Brasil</label>
                     <small class="form-hint" id="exibindo-texto">Nenhum epicentro na área visível.</small>
                     <small class="form-hint" id="exibindo-falhas-texto"></small>
-                    <button type="button" class="btn-link-danger hidden" id="btn-apagar-epicentros">
-                        <i class="fa-regular fa-trash-can"></i> Apagar todos os epicentros
-                    </button>
                 </div>
 
-                <!-- Importações registradas -->
-                <div class="hidden" id="importacoes-box">
-                    <h2 class="section-title">Importações recentes</h2>
-                    <small class="form-hint">Clique para ver a área consultada no mapa.</small>
-                    <ul class="importacoes-lista" id="importacoes-lista"></ul>
-                </div>
+                <h2 class="section-title">Adicionar dados</h2>
 
-                <!-- Fontes de falhas -->
-                <div class="hidden" id="fontes-falhas-box">
-                    <h2 class="section-title">Fontes de falhas</h2>
-                    <ul class="fontes-lista" id="fontes-falhas"></ul>
-                </div>
+                <!-- Importação de epicentros -->
+                <details class="sanfona">
+                    <summary><i class="fa-solid fa-circle-dot"></i> Importar epicentros <small>USGS · USP</small></summary>
+                    <form class="sanfona-corpo" id="form-importar">
+                        <div class="form-row">
+                            <label>Catálogo
+                                <select id="imp-fonte">
+                                    <option value="usgs">USGS (mundial)</option>
+                                    <option value="usp">Centro de Sismologia da USP (Brasil)</option>
+                                </select>
+                            </label>
+                        </div>
+                        <small class="form-hint" id="imp-fonte-dica">Catálogo mundial. No Brasil registra só os sismos maiores: use o da USP.</small>
+                        <div class="form-area">
+                            <i class="fa-regular fa-square"></i>
+                            <div>
+                                <strong>Área visível do mapa</strong>
+                                <small id="bbox-texto">--</small>
+                            </div>
+                        </div>
+                        <label class="check-linha" title="Na USGS, use M ≥ 5: acima de 20 mil eventos a importação é feita em lotes."><input type="checkbox" id="imp-mundo"> Mundo inteiro</label>
+                        <div class="form-row">
+                            <label>Início<input type="date" id="imp-inicio" required></label>
+                            <label>Fim<input type="date" id="imp-fim" required></label>
+                        </div>
+                        <div class="form-row">
+                            <label>Magnitude mínima<input type="number" id="imp-mag" min="-2" max="10" step="0.1" value="2.5" required></label>
+                        </div>
+                        <button type="submit" class="btn-primary" id="btn-importar">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> <span id="btn-importar-texto">Importar da USGS</span>
+                        </button>
+                    </form>
+                </details>
+
+                <!-- Importação de falhas -->
+                <details class="sanfona">
+                    <summary><i class="fa-solid fa-wave-square"></i> Importar falhas <small>GEM · SGB · arquivo</small></summary>
+                    <div class="sanfona-corpo">
+                        <div class="seletor-fonte">
+                            <button type="button" class="ativo" data-fonte-falha="gem">GEM</button>
+                            <button type="button" data-fonte-falha="sgb">SGB (Brasil)</button>
+                            <button type="button" data-fonte-falha="arquivo">Arquivo</button>
+                        </div>
+                        <div class="fonte-opcao" data-fonte-painel="gem">
+                            <small>Falhas ativas do mundo todo (Andes, Califórnia, Himalaia). <b>Não cobre o Brasil.</b> Usa a área visível do mapa.</small>
+                            <button type="button" class="btn-secondary" id="btn-importar-gem">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> Importar falhas do GEM
+                            </button>
+                        </div>
+                        <div class="fonte-opcao hidden" data-fonte-painel="sgb">
+                            <small>Falhas e zonas de cisalhamento do Brasil (1:1.000.000), em sua maioria <b>estruturas antigas</b>. Usa a área visível; o primeiro download leva ~20 s.</small>
+                            <label class="check-linha"><input type="checkbox" id="sgb-lineamentos"> Incluir lineamentos de foliação</label>
+                            <button type="button" class="btn-secondary" id="btn-importar-sgb">
+                                <i class="fa-solid fa-cloud-arrow-down"></i> Importar estruturas do SGB
+                            </button>
+                        </div>
+                        <form class="fonte-opcao hidden" data-fonte-painel="arquivo" id="form-upload">
+                            <small>GeoJSON ou shapefile (.zip) em WGS84 / SIRGAS 2000.</small>
+                            <label class="file-input">
+                                <input type="file" id="upload-arquivo" accept=".geojson,.json,.zip" required>
+                                <span id="upload-nome"><i class="fa-regular fa-folder-open"></i> Escolher arquivo...</span>
+                            </label>
+                            <div class="form-row">
+                                <label>Nome da fonte<input type="text" id="upload-fonte" maxlength="80" placeholder="ex.: SGB - Falhas RN"></label>
+                            </div>
+                            <button type="submit" class="btn-secondary" id="btn-upload">
+                                <i class="fa-solid fa-upload"></i> Enviar falhas
+                            </button>
+                        </form>
+                    </div>
+                </details>
+
+                <!-- Detalhes da base -->
+                <details class="sanfona">
+                    <summary><i class="fa-solid fa-database"></i> Detalhes da base <small id="db-backend">–</small></summary>
+                    <div class="sanfona-corpo">
+                        <div class="hidden" id="importacoes-box">
+                            <h3 class="sub-title">Importações recentes</h3>
+                            <small class="form-hint">Clique para ver a área consultada no mapa.</small>
+                            <ul class="importacoes-lista" id="importacoes-lista"></ul>
+                        </div>
+                        <div class="hidden" id="fontes-falhas-box">
+                            <h3 class="sub-title">Fontes de falhas</h3>
+                            <ul class="fontes-lista" id="fontes-falhas"></ul>
+                        </div>
+                        <button type="button" class="btn-link-danger hidden" id="btn-apagar-epicentros">
+                            <i class="fa-regular fa-trash-can"></i> Apagar todos os epicentros
+                        </button>
+                    </div>
+                </details>
             </section>
 
             <!-- VIEW: Análise -->
             <section class="panel-view hidden" id="view-analise">
                 <h2 class="section-title">Nova análise</h2>
                 <form class="form-card" id="form-analise">
+                    <span class="campo-titulo">Área de estudo</span>
                     <div class="area-escolha" role="radiogroup" aria-label="Área de estudo">
-                        <label class="area-opcao">
+                        <label class="area-opcao" title="Exatamente onde os sismos foram buscados (recomendado)">
                             <input type="radio" name="an-area" value="importada" checked>
-                            <span><strong>Área importada</strong><small>Exatamente onde os sismos foram buscados (recomendado)</small></span>
+                            <span><i class="fa-solid fa-crop-simple"></i> Área importada</span>
                         </label>
-                        <label class="area-opcao">
+                        <label class="area-opcao" title="Brasil ou um estado (contorno do IBGE): o acaso só sorteia pontos dentro dele">
                             <input type="radio" name="an-area" value="territorio">
-                            <span><strong>Território</strong><small>Brasil ou um estado (contorno do IBGE): o acaso só sorteia pontos dentro dele</small>
-                                <select id="an-territorio" aria-label="Território"><option value="BR">Brasil (território inteiro)</option></select>
-                            </span>
+                            <span><i class="fa-solid fa-map"></i> Território</span>
                         </label>
-                        <label class="area-opcao">
+                        <label class="area-opcao" title="Distâncias geodésicas (na esfera), corretas em qualquer escala">
                             <input type="radio" name="an-area" value="mundo">
-                            <span><strong>Mundo inteiro</strong><small>Distâncias geodésicas (na esfera), corretas em qualquer escala</small></span>
+                            <span><i class="fa-solid fa-earth-americas"></i> Mundo inteiro</span>
                         </label>
-                        <label class="area-opcao">
+                        <label class="area-opcao" title="Só o retângulo que aparece no mapa agora">
                             <input type="radio" name="an-area" value="visivel">
-                            <span><strong>Área visível do mapa</strong><small id="bbox-analise-texto">--</small></span>
+                            <span><i class="fa-regular fa-square"></i> Área visível</span>
                         </label>
                     </div>
+                    <div class="area-extra area-extra-territorio">
+                        <select id="an-territorio" aria-label="Território"><option value="BR">Brasil (território inteiro)</option></select>
+                    </div>
+                    <small class="form-hint area-extra area-extra-visivel" id="bbox-analise-texto">--</small>
+
                     <div class="form-row">
                         <label>Catálogo de sismos
                             <select id="an-catalogo"><option value="">Carregando...</option></select>
                         </label>
-                    </div>
-                    <small class="form-hint"><i class="fa-solid fa-circle-info"></i> Um catálogo por análise: o mesmo sismo pode estar em dois catálogos com ids diferentes.</small>
-                    <label class="check-linha"><input type="checkbox" id="an-intraplaca"> Só sismicidade intraplaca: descartar sismos a menos de
-                        <input type="number" id="an-intraplaca-km" value="200" min="1" max="2000" step="10" class="input-curto"> km de limites de placa (subducção, dorsais, transformantes)</label>
-                    <div class="form-row">
-                        <label>Profundidade máxima
+                        <label title="Falhas mapeadas são traços na superfície; sismos profundos ocorrem longe do traço. Por isso o padrão é analisar só os rasos.">Profundidade
                             <select id="an-prof">
                                 <option value="">Todas</option>
-                                <option value="35" selected>Até 35 km (crustal rasa)</option>
+                                <option value="35" selected>Até 35 km</option>
                                 <option value="70">Até 70 km</option>
                             </select>
                         </label>
-                        <label>Magnitude mínima<input type="number" id="an-mag" min="-2" max="10" step="0.1" placeholder="Todas"></label>
                     </div>
-                    <small class="form-hint"><i class="fa-solid fa-circle-info"></i> Falhas mapeadas são traços na superfície. Sismos profundos (ex.: em subducção) ocorrem longe do traço; por isso o padrão é analisar só os rasos.</small>
-                    <div class="form-row">
-                        <label>Buffers (km)<input type="text" id="an-buffers" value="5, 10, 20, 50"></label>
-                        <label>Simulações
-                            <select id="an-sims">
-                                <option value="99">99 (rápido)</option>
-                                <option value="499">499</option>
-                                <option value="999" selected>999</option>
-                                <option value="4999">4.999 (preciso)</option>
-                            </select>
-                        </label>
-                    </div>
+
                     <details class="mais-opcoes">
-                        <summary>Mais opções</summary>
+                        <summary>Opções avançadas</summary>
+                        <div class="form-row">
+                            <label>Magnitude mínima<input type="number" id="an-mag" min="-2" max="10" step="0.1" placeholder="Todas"></label>
+                            <label>Simulações
+                                <select id="an-sims">
+                                    <option value="99">99 (rápido)</option>
+                                    <option value="499">499</option>
+                                    <option value="999" selected>999</option>
+                                    <option value="4999">4.999 (preciso)</option>
+                                </select>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <label>Buffers (km)<input type="text" id="an-buffers" value="5, 10, 20, 50"></label>
+                        </div>
                         <div class="form-row">
                             <label>Início<input type="date" id="an-inicio"></label>
                             <label>Fim<input type="date" id="an-fim"></label>
@@ -259,6 +258,8 @@
                             <label>Nome da análise<input type="text" id="an-nome" maxlength="120" placeholder="Gerado automaticamente"></label>
                         </div>
                         <label class="check-linha"><input type="checkbox" id="an-sem-prof" checked> Tratar sismos sem profundidade como rasos (comum no Brasil)</label>
+                        <label class="check-linha"><input type="checkbox" id="an-intraplaca"> Só intraplaca: descartar sismos a menos de
+                            <input type="number" id="an-intraplaca-km" value="200" min="10" max="2000" step="10" class="input-curto"> km de limites de placa</label>
                         <fieldset class="fontes-check" id="an-fontes">
                             <legend>Fontes de falhas</legend>
                             <small class="form-hint">Nenhuma falha importada.</small>
@@ -291,16 +292,8 @@
                     <p class="res-meta" id="res-meta"></p>
                     <ul class="avisos hidden" id="res-avisos"></ul>
 
-                    <div class="exportar" id="res-exportar">
-                        <span>Exportar:</span>
-                        <a class="btn-chip" id="exp-csv" download title="Uma linha por epicentro (Excel: separador ; e vírgula decimal)"><i class="fa-solid fa-file-csv"></i> CSV</a>
-                        <a class="btn-chip" id="exp-geojson" download title="Epicentros, ligações até a falha e área de estudo (QGIS)"><i class="fa-solid fa-map"></i> GeoJSON</a>
-                        <a class="btn-chip" id="exp-json" download title="Resultado completo da análise"><i class="fa-solid fa-code"></i> JSON</a>
-                    </div>
-
                     <h3 class="sub-title">Eventos perto das falhas</h3>
-                    <small class="form-hint">Clique numa linha para ver a zona no mapa.</small>
-                    <table class="tabela" id="res-buffers">
+                    <table class="tabela" id="res-buffers" title="Clique numa linha para ver a zona no mapa">
                         <thead><tr><th>Até</th><th>Observado</th><th>Esperado</th><th>Razão</th><th title="p-valor com correção de Bonferroni pelo número de buffers">p ajust.</th></tr></thead>
                         <tbody></tbody>
                     </table>
@@ -308,24 +301,41 @@
                     <h3 class="sub-title">Distribuição das distâncias</h3>
                     <div class="grafico-box"><canvas id="grafico-hist" role="img" aria-label="Histograma das distâncias epicentro–falha, observado e esperado ao acaso"></canvas></div>
 
-                    <h3 class="sub-title">Falhas com mais eventos</h3>
-                    <small class="form-hint" id="res-ranking-hint">Eventos atribuídos à falha mais próxima, até o maior buffer. Clique para ver no mapa.</small>
-                    <table class="tabela tabela-ranking" id="res-ranking">
-                        <thead><tr><th>Falha</th><th>Eventos</th><th>M máx</th><th>/100 km</th></tr></thead>
-                        <tbody></tbody>
-                    </table>
-
-                    <div id="res-categorias-box" class="hidden">
-                        <h3 class="sub-title">Por tipo de falha</h3>
-                        <small class="form-hint" id="res-categorias-hint"></small>
-                        <table class="tabela" id="res-categorias">
-                            <thead><tr><th>Tipo</th><th>Falhas</th><th>Observado</th><th>Esperado</th><th>Razão</th><th>p ajust.</th></tr></thead>
-                            <tbody></tbody>
-                        </table>
+                    <div class="exportar" id="res-exportar">
+                        <span>Exportar:</span>
+                        <a class="btn-chip" id="exp-csv" download title="Uma linha por epicentro (Excel: separador ; e vírgula decimal)"><i class="fa-solid fa-file-csv"></i> CSV</a>
+                        <a class="btn-chip" id="exp-geojson" download title="Epicentros, ligações até a falha e área de estudo (QGIS)"><i class="fa-solid fa-map"></i> GeoJSON</a>
+                        <a class="btn-chip" id="exp-json" download title="Resultado completo da análise"><i class="fa-solid fa-code"></i> JSON</a>
                     </div>
 
-                    <h3 class="sub-title">Outros testes</h3>
-                    <dl class="outros-testes" id="res-outros"></dl>
+                    <details class="sanfona">
+                        <summary><i class="fa-solid fa-ranking-star"></i> Falhas com mais eventos</summary>
+                        <div class="sanfona-corpo">
+                            <small class="form-hint" id="res-ranking-hint">Eventos atribuídos à falha mais próxima, até o maior buffer. Clique para ver no mapa.</small>
+                            <table class="tabela tabela-ranking" id="res-ranking">
+                                <thead><tr><th>Falha</th><th>Eventos</th><th>M máx</th><th>/100 km</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </details>
+
+                    <details class="sanfona hidden" id="res-categorias-box">
+                        <summary><i class="fa-solid fa-layer-group"></i> Por tipo de falha</summary>
+                        <div class="sanfona-corpo">
+                            <small class="form-hint" id="res-categorias-hint"></small>
+                            <table class="tabela" id="res-categorias">
+                                <thead><tr><th>Tipo</th><th>Falhas</th><th>Observado</th><th>Esperado</th><th>Razão</th><th>p ajust.</th></tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </details>
+
+                    <details class="sanfona">
+                        <summary><i class="fa-solid fa-flask-vial"></i> Outros testes estatísticos</summary>
+                        <div class="sanfona-corpo">
+                            <dl class="outros-testes" id="res-outros"></dl>
+                        </div>
+                    </details>
                 </div>
             </section>
 
